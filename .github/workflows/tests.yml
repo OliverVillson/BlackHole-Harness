@@ -22,5 +22,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - run: pip install -e 'reaper[pipeline]' -e harness pytest
-      - run: pytest -q reaper/tests reaper/gpu_perf harness/tests
+      - run: pip install -e '.[dev]' -e 'reaper[pipeline]' -e harness pytest
+      - run: pytest -q reaper/tests reaper/gpu_perf harness/tests tests/test_hex.py
