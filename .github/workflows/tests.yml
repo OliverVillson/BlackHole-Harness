@@ -13,3 +13,14 @@ jobs:
           python-version: "3.12"
       - run: pip install -e '.[dev,frontier]'
       - run: pytest -q
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e 'reaper[pipeline]' -e harness pytest
+      - run: pytest -q reaper/tests reaper/gpu_perf harness/tests
