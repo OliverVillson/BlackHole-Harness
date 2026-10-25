@@ -1,0 +1,80 @@
+# REAPer as a schema: prune a mixture-of-experts model for one stated purpose, keep the
+# experts that purpose uses, check it against the unpruned model, store experts in fp8.
+# Output serves with vLLM on a GPU box (a 30B-A3B MoE at 50% fits one 24-32 GB card in fp8).
+#
+#   blackhole run schemas/reap-purpose.toml Qwen/Qwen3-30B-A3B-Instruct-2507 --set purpose="Debugging only"
+
+api = "blackhole/v1"
+id = "blackhole/reap-purpose"
+version = "1.0.0"
+title = "Prune a MoE for one purpose"
+description = "REAP expert pruning calibrated on teacher answers for a stated purpose, then fp8 experts."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["moe", "reap", "fp8", "vllm"]
+base_compat = ["Qwen/Qwen3-30B-A3B-Instruct-2507", "RecursiveSI/flint"]
+outputs = ["safetensors-fp8", "safetensors-bf16"]
+
+[targets]
+architectures = ["moe"]
+min_params_b = 15
+
+[footprint]
+device = "24GB-VRAM"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What should the model be good at? e.g. \"Debugging only\", \"SQL\", \"General coding\""
+
+[inputs.prune]
+type = "float"
+default = 0.25                     # B200 runs: 25-37.5% beats 50%; 75% is bad at any bits
+min = 0.125
+max = 0.75
+advanced = true
+help = "Share of routed experts dropped in every MoE layer"
+
+[inputs.fp8]
+type = "bool"
+default = true
+advanced = true
+help = "Store the routed experts in fp8 (vLLM); off keeps bf16"
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"          # the unpruned model writes and answers prompts for the purpose
+purpose = "${inputs.purpose}"
+samples = 64                       # scored as well as 256 in the B200 runs
+heldout = 32
+
+[[stage]]
+kind = "score.reap"                # REAP saliency on calib.data (the data so far)
+
+[[stage]]
+kind = "prune.reap"
+ratio = "${inputs.prune}"          # a rerun with another ratio starts here: calib and score are cached
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"            # pruned vs teacher on the held-out answers
+heldout = "${calib.heldout}"
+  [[stage.gates]]
+  metric = "top1_agreement"
+  op = ">="
+  value = 0.70
+  on_fail = "warn"                 # Flint at 50% read 0.83
+
+[[stage]]
+kind = "quant.fp8_experts"
+when = "${inputs.fp8}"
+
+[[stage]]
+kind = "package.hf"
+
+[eval]
+suites = ["agreement"]
+  [[eval.gates]]
+  metric = "check.top1_agreement"
+  op = ">="
+  value = 0.75

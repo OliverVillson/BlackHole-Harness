@@ -1,0 +1,118 @@
+# REAQ, Router-weighted Expert Activation Quantization: a BlackHole-Harness original
+# (2026-10-23). REAP's router-weighted activation score sets each expert's
+# bit width inside an interval; no expert is removed.
+#
+# LAB SCHEMA: experimental until the GPU thread's interval test reports. An earlier version
+# that allowed 2-bit and pruned the coldest experts lost to uniform int4/int3 at equal size
+# by 0.01-0.04 KL on Qwen3-30B-A3B. The baseline to beat is blackhole/moe-prune-int4.
+#
+# MoE ONLY, floor 3 bits: on MoEfied dense Qwen3-8B REAQ lost to uniform GPTQ at both budgets
+# (int4 0.028 vs 0.031, int3 0.108 vs 0.24) and every interval touching 2-bit was bad.
+# Dense models stay on uniform GPTQ (blackhole/dense-prune-int4).
+#
+#   calib -> score.reap (the shared score table) -> quant.reaq (bits per expert in [Q3_K, Q6_K]
+#   under the byte budget) -> heal.kd against the fake-quantised experts -> export
+
+api = "blackhole/v1"
+id = "lab/reaq"
+version = "0.2.1"
+title = "REAQ"
+description = "Router-weighted Expert Activation Quantization: bits per expert from REAP scores, within an interval, no experts removed."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["moe", "reap", "reaq", "mixed-bit", "experimental", "lab", "blackhole-original"]
+base_compat = ["Qwen/Qwen3-30B-A3B-Instruct-2507"]
+outputs = ["safetensors-bf16"]
+
+[targets]
+architectures = ["moe"]
+
+[footprint]
+max_gb = 12.0
+device = "16GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What the model is for; it decides which experts get more bits"
+
+[inputs.max_gb]
+type = "float"
+default = 10.5
+min = 4
+max = 40
+help = "Expert byte budget in GB"
+
+[inputs.min_bits]
+type = "enum"
+choices = ["Q3_K", "Q4_K"]
+default = "Q3_K"
+help = "No expert goes below this (3 bits minimum; 2-bit measured bad)"
+
+[inputs.max_bits]
+type = "enum"
+choices = ["Q4_K", "Q5_K", "Q6_K", "Q8_0"]
+default = "Q6_K"
+
+[inputs.layout]
+type = "enum"
+choices = ["safetensors", "bands", "layer"]
+default = "safetensors"
+advanced = true
+help = "safetensors: per-expert configs (torch/vLLM loader); bands: GGUF with the llama.cpp patch; layer: stock Ollama, averages REAQ away"
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"
+purpose = "${inputs.purpose}"
+samples = 128
+heldout = 64
+
+[[stage]]
+kind = "score.reap"
+
+[[stage]]
+id = "reaq"
+kind = "quant.reaq"
+saliency = "${score.saliency}"
+max_gb = "${inputs.max_gb}"
+min_bits = "${inputs.min_bits}"
+max_bits = "${inputs.max_bits}"
+layout = "${inputs.layout}"
+  [[stage.gates]]
+  metric = "predicted_gb"
+  op = "<="
+  value = "${inputs.max_gb}"
+
+[[stage]]
+id = "gptq"
+kind = "quant.gptq"                # error-compensated rounding onto each expert's chosen grid
+data = "${calib.data}"
+grid = "typemap:${reaq.type_map}"
+
+[[stage]]
+kind = "heal.kd"
+teacher = "${base.model}"
+kd_weight = 1.0
+max_minutes = 60
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+
+[[stage]]
+kind = "package.hf"
+
+[eval]
+suites = ["agreement"]
+  [[eval.gates]]
+  metric = "check.kl"
+  op = "<="
+  value = 0.034                    # must beat REAP 25% + GPTQ int4 to earn a place outside the lab

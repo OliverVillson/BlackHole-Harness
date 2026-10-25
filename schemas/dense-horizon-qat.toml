@@ -1,0 +1,138 @@
+# Event Horizon as a schema (expert mode): a small dense or hybrid model trained into
+# llama.cpp's low-bit K-quant grids, judged by benchmark points per GB of the shipped GGUF.
+# The file is the whole artifact: no adapter. Gates are written before any reading and
+# stop the run cleanly; the upload still runs.
+#
+#   gate0     the original's reading must clear inputs.min_base
+#   preflight the planned file must be able to reach the goal at the original's score
+#   rounds    on-policy RFT rounds kept only when held-out KL drops and pass@1 holds
+#   parity    the export is bit-exact, KLD <= 0.01 and top-1 >= 98% vs a bf16 GGUF
+
+api = "blackhole/v1"
+id = "blackhole/dense-horizon-qat"
+version = "0.1.0"
+title = "Sub-4-bit QAT for small coders"
+description = "Vocab trim, measured bit allocation, Block-AP then end-to-end KD QAT, on-policy rounds, parity-checked GGUF."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["dense", "hybrid", "qat", "gguf", "code", "expert"]
+base_compat = ["ibm-granite/granite-4.2-3b"]
+parent = ""
+outputs = ["gguf"]
+
+[targets]
+architectures = ["dense", "hybrid"]
+max_params_b = 9
+
+[footprint]
+max_gb = 1.25
+device = "8GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[data_policy]
+licenses_allowed = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "CC-BY-4.0"]
+decontam = ["livecodebench"]
+
+[inputs.goal_per_gb]
+type = "float"
+default = 40.0
+advanced = true
+help = "LiveCodeBench pass@1 points per GB of the shipped file"
+
+[inputs.min_base]
+type = "float"
+default = 52.0
+advanced = true
+help = "Stop if the original model scores below this"
+
+[[stage]]
+id = "r0"
+kind = "eval.bench"                # the original's reading, before anything else
+model = "${base.model}"
+suites = ["livecodebench"]
+samples = 4
+compare_base = false
+thinking = true
+  [[stage.gates]]
+  metric = "livecodebench"
+  op = ">="
+  value = "${inputs.min_base}"
+
+[[stage]]
+id = "text"
+kind = "data.own_rollouts"         # the original's own passing answers to clean problems (~40M tokens)
+model = "${base.model}"
+prompts = "hf:deepmind/code_contests"
+samples_per_prompt = 2
+checker = "tests"
+
+[[stage]]
+kind = "data.decontam"
+
+[[stage]]
+kind = "vocab.trim"
+keep = 80000
+
+[[stage]]
+id = "map"
+kind = "quant.gguf_map"
+max_gb = 1.25
+floor = "q2_k"
+ceiling = "q4_k"
+  [[stage.gates]]                  # preflight: the file must be able to reach the goal at R0
+  metric = "points_ceiling_per_gb"
+  op = ">="
+  value = "${inputs.goal_per_gb}"
+
+[[stage]]
+id = "blockap"
+kind = "qat.block_ap"
+type_map = "${map.type_map}"
+
+[[stage]]
+id = "e2e"
+kind = "distil.kd"
+teacher = "${base.model}"
+kd_weight = 1.0
+lora_r = 0                         # full weights, on the quant grid
+max_minutes = 120
+
+[[stage]]
+kind = "rft.self"
+prompts = "${text.data}"
+rounds = 4
+stop_after_unkept = 2
+
+[[stage]]
+kind = "quant.gguf"
+type_map = "${map.type_map}"
+  [[stage.gates]]
+  metric = "parity_kld"
+  op = "<="
+  value = 0.01
+  [[stage.gates]]
+  metric = "parity_top1"
+  op = ">="
+  value = 0.98
+
+[[stage]]
+id = "read"
+kind = "eval.bench"
+suites = ["livecodebench"]
+samples = 4
+thinking = true
+
+[[stage]]
+kind = "package.gguf"
+
+[[stage]]
+kind = "sync.bucket"
+always = true
+
+[eval]
+suites = ["livecodebench"]
+  [[eval.gates]]
+  metric = "read.livecodebench_lo_per_gb"   # lower bound (R - 1.645 SE) per GB
+  op = ">="
+  value = 40.0

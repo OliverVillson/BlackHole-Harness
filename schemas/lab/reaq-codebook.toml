@@ -1,0 +1,103 @@
+# REAQ + per-expert codebooks: a BlackHole-Harness original (2026-10-23).
+# REAQ ranks experts by REAP score; hot experts get a 16-level learned value table, the rest
+# an 8-level one, NVFP4-style 16-weight blocks with FP8 scales underneath.
+#
+# LAB SCHEMA. Measured on Qwen3-30B-A3B at REAP 25% (B200, 2026-10-23, simulated quant,
+# 32 held-out answers), with GPTQ rounding onto the tables: KL 0.033 at 9.5 GB, beating the
+# MoE default (REAP 25% + GPTQ int4, 0.034 at 10.4 GB); at 3.25 bpw 8-level tables give 0.054
+# vs GPTQ int3 0.083; at 3.5 bpw REAQ's split 0.041 vs 0.047 random, 0.049 uniform 8-level.
+# Stays lab until a second MoE (gpt-oss-20b) confirms it and a real kernel exists.
+# SERVING: needs a custom kernel or a llama.cpp/vLLM patch; there is no packed format yet,
+# so this exports fake-quantised bf16 plus headers, for measuring only.
+
+api = "blackhole/v1"
+id = "lab/reaq-codebook"
+version = "0.2.0"
+title = "REAQ with per-expert codebooks"
+description = "Prune 25% with REAP, then give each expert a learned 8- or 16-level value table chosen by its REAP score."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["moe", "reap", "reaq", "codebook", "nvfp4", "experimental", "lab", "blackhole-original"]
+base_compat = ["Qwen/Qwen3-30B-A3B-Instruct-2507"]
+outputs = ["safetensors-bf16"]
+
+[targets]
+architectures = ["moe"]
+
+[footprint]
+max_gb = 12.0
+device = "16GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What the model is for; it decides which experts get the bigger table"
+
+[inputs.prune]
+type = "float"
+default = 0.25
+min = 0.0
+max = 0.5
+help = "Share of experts REAP removes first (never past 50%)"
+
+[inputs.hot_share]
+type = "float"
+default = 0.5
+min = 0.0
+max = 1.0
+help = "Share of experts (by REAP score) on 16-level tables; the rest get 8"
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"
+purpose = "${inputs.purpose}"
+samples = 128
+heldout = 64
+
+[[stage]]
+kind = "score.reap"
+
+[[stage]]
+kind = "prune.reap"
+saliency = "${score.saliency}"
+ratio = "${inputs.prune}"
+
+[[stage]]
+kind = "score.reap"                # re-score the surviving experts
+id = "rescore"
+
+[[stage]]
+id = "reaq"
+kind = "quant.reaq"
+saliency = "${rescore.saliency}"
+target = "codebook"
+levels = [8, 16]
+hot_share = "${inputs.hot_share}"
+
+[[stage]]
+id = "codebook"
+kind = "quant.expert_codebook"
+data = "${calib.data}"
+type_map = "${reaq.type_map}"
+rounding = "gptq"
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+
+[[stage]]
+kind = "package.hf"
+
+[eval]
+suites = ["agreement"]
+  [[eval.gates]]
+  metric = "check.kl"
+  op = "<="
+  value = 0.034                    # must beat REAP 25% + GPTQ int4 to leave the lab

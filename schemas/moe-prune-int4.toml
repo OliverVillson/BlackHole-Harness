@@ -1,0 +1,107 @@
+# The default for any MoE: REAP-prune a quarter of the experts and GPTQ to 4 bits; when the
+# file must be smaller, go to 3 bits before pruning more, and never prune past 50%.
+#
+# GPTQ frontier on Qwen3-30B-A3B (B200, 2026-10-23, KL to the unpruned model on held-out
+# teacher answers, lower is better):
+#   REAP 25%   + GPTQ int4    ~10.4 GB   KL 0.034
+#   REAP 37.5% + GPTQ int3      6.9 GB   KL 0.121
+#   REAP 50%   + GPTQ int4      6.9 GB   KL 0.171   (same size, worse: quantise harder before pruning more)
+#   8-bit/bf16 experts never won at equal size; pruning 75% was bad at any bit width
+#   64 calibration sequences scored REAP as well as 256
+# plan.fit walks: 25% + Q4_K_M -> 25% + Q3_K_M -> 37.5% + Q3_K_M, and stops with the reason
+# if none fits.
+# Once quant.expert_codebook has a kernel, "REAP 25% + REAQ codebooks" replaces the int3
+# tiers (lab: KL 0.033 at 9.5 GB, 0.041 near 9 GB vs 0.074); see lab/reaq-codebook.toml.
+#
+#   blackhole run schemas/moe-prune-int4.toml Qwen/Qwen3-30B-A3B-Instruct-2507 --set purpose="General coding"
+
+api = "blackhole/v1"
+id = "blackhole/moe-prune-int4"
+version = "1.1.0"
+title = "Prune a quarter, GPTQ to 4 bits"
+description = "REAP-prune 25% of experts for a purpose and GPTQ to 4 bits; 3 bits, then 37.5%, only as a size target needs them. The default for MoE models."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["moe", "reap", "gptq", "gguf", "int4", "int3", "default"]
+base_compat = ["Qwen/Qwen3-30B-A3B-Instruct-2507"]
+outputs = ["gguf"]
+
+[targets]
+architectures = ["moe"]
+
+[footprint]
+device = "16GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What should the model be good at? e.g. \"General coding\", \"SQL\", \"Debugging only\""
+
+[inputs.max_gb]
+type = "float"
+default = 0.0
+min = 0.0
+help = "Largest model file you can use, in GB; 0 means 25% pruned at 4 bits"
+
+[[stage]]
+id = "fit"
+kind = "plan.fit"
+params_b = "${base.params_b}"
+prunable_b = "${base.expert_params_b}"
+max_gb = "${inputs.max_gb}"
+ladder = [{bits = "Q4_K_M", prune = 0.25}, {bits = "Q3_K_M", prune = 0.25}, {bits = "Q3_K_M", prune = 0.375}]
+  [[stage.gates]]
+  metric = "fits"
+  op = "=="
+  value = true
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"
+purpose = "${inputs.purpose}"
+samples = 128                      # 64 is enough for REAP; GPTQ Hessians use the rest
+heldout = 32
+
+[[stage]]
+kind = "score.reap"
+
+[[stage]]
+kind = "prune.reap"
+ratio = "${fit.metrics.prune}"
+
+[[stage]]
+id = "gptq"
+kind = "quant.gptq"
+data = "${calib.data}"
+grid = "gguf:${fit.metrics.bits}"
+
+[[stage]]
+kind = "quant.gguf"
+type = "${fit.metrics.bits}"
+pre_snapped = true
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"
+  [[stage.gates]]
+  metric = "kl"
+  op = "<="
+  value = 0.15
+  on_fail = "warn"
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+
+[[stage]]
+kind = "package.gguf"
+
+[eval]
+suites = ["agreement"]
+  [[eval.gates]]
+  metric = "check.kl"
+  op = "<="
+  value = 0.15
