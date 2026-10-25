@@ -26,11 +26,23 @@ project:
 - **MoEfy-anneal** (lab): turn a dense model into a MoE with every expert on, then distil
   while the active experts step down.
 
+## The three BlackHole products
+
+1. **BlackHole-Harness** (this repo, free): the training pipeline harness. Preset recipes
+   (schemas) that run on any open model, the TUI, the VM tooling, and the open format layer
+   `blackhole.anatomy` (safetensors IO, the HEX layout and quantizer, format table).
+2. **BlackHole-Dev** (paid): the dev training harness. The developer API that opens any model
+   as objects (layers, heads, routers, experts with REAP scores, neurons, single weights),
+   edits them, and packages manipulations as named functions schemas call through `model.edit`.
+   Installs on top of this package.
+3. **The BlackHole run harness**: serving BlackHole-made models with their own kernels (HEX on
+   Metal today, Triton for NVIDIA in progress) and room for non-conventional model layouts.
+
 ## Layout
 
 | Path | What |
 |---|---|
-| `blackhole/` | the `blackhole-harness` package: schema format, op catalog, runner, stage cache, receipts (`core`), hardware and model detection (`hw`), schema builder with Claude or GPT (`agent`), marketplace (`market`), GPU VM bring-up (`cloud`) |
+| `blackhole/` | the `blackhole-harness` package: schema format, op catalog, runner, stage cache, receipts (`core`), hardware and model detection (`hw`), the open format layer: safetensors IO, HEX layout and quantizer, format table (`anatomy`), schema builder with Claude or GPT (`agent`), marketplace (`market`), GPU VM bring-up (`cloud`) |
 | `schemas/` | example schemas; `schemas/lab/` holds experimental ones |
 | `tests/` | core tests, no GPU or network needed |
 | `install.sh` | one-line installer for a fresh Ubuntu GPU VM |

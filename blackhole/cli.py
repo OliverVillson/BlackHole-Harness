@@ -5,6 +5,8 @@
     blackhole detect MODEL [--schemas DIR] [--json]    what a model is (any HF id, fuzzy name or folder) and which schemas fit
     blackhole validate SCHEMA                          parse + check against the op catalog
     blackhole ops [--json]                             the op catalog
+    blackhole inspect MODEL [QUERY]                    model structure and weights (with blackhole-dev installed)
+    blackhole fn list|show|run                         named weight functions (with blackhole-dev installed)
     blackhole jobs | logs [JOB] | stop [JOB]           follow and control jobs
     blackhole describe "TEXT" [--model M]              frontier model drafts a schema (blackhole.agent)
     blackhole market search|pull|publish|submit        the registry (blackhole.market)
@@ -30,7 +32,7 @@ def _sets(pairs: list[str]) -> dict:
     return out
 
 
-COMMANDS = {"run", "validate", "detect", "ops", "-h", "--help"}   # plus agent_cli.COMMANDS
+COMMANDS = {"run", "validate", "detect", "ops", "inspect", "fn", "-h", "--help"}   # plus agent_cli.COMMANDS
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,9 +69,17 @@ def main(argv: list[str] | None = None) -> int:
     o = sub.add_parser("ops")
     o.add_argument("--json", action="store_true")
     agent_cli.add_commands(sub)
+    try:                       # blackhole-dev (the dev training harness) adds inspect / fn when installed
+        from blackhole_dev import cli as anatomy_cli
+    except ImportError:
+        anatomy_cli = None
+    if anatomy_cli:
+        anatomy_cli.add_commands(sub)
     a = ap.parse_args(argv)
     if a.cmd in agent_cli.COMMANDS:
         return agent_cli.dispatch(a)
+    if anatomy_cli and a.cmd in anatomy_cli.COMMANDS:
+        return anatomy_cli.dispatch(a)
 
     if a.cmd == "detect":
         from pathlib import Path
