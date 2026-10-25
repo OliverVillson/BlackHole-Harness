@@ -68,8 +68,9 @@ def test_stop(monkeypatch):
     assert last["outcome"] == "stopped"
 
 
-def test_tui_run_and_reattach():
+def test_tui_run_and_reattach(monkeypatch):
     from blackhole_tui.app import BlackHole
+    monkeypatch.setenv("BLACKHOLE_DEMO_SPEED", "8")  # at 40 a fast runner finishes the demo inside the first 0.5 s
 
     async def go():
         app = BlackHole(demo=True, model="gpt-oss 20b", schema="laptop-chat", target="mac16")
