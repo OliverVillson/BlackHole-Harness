@@ -1,0 +1,18 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+build/
+dist/
+.DS_Store
+# model weights and job output never go in the repo
+*.safetensors
+*.gguf
+*.bin
+*.pt
+*.pth
+*.npz
+jobs/
+out/

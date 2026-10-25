@@ -1,0 +1,151 @@
+# BlackHole's public-model recipe: a small MoE (Granite-4.0-H-Tiny class) taught by a big
+# teacher, pruned, healed and quantised into one GGUF that runs in Ollama on a laptop.
+#
+#   distil (teacher answers the purpose; the base learns them)
+#   -> REAP 50-60% of experts, scored on the distilled model
+#   -> heal with logit KD from the distilled, unpruned model
+#   -> per-layer GGUF type map under the footprint budget (REAP importance x imatrix)
+#   -> final heal against the fake-quantised weights, merged (Ollama has no runtime LoRA)
+#   -> GGUF + Modelfile, measured footprint, public benches, upload
+
+api = "blackhole/v1"
+id = "blackhole/laptop-moe-gguf"
+version = "0.1.0"
+title = "Small MoE to a laptop GGUF"
+description = "Distil, REAP-prune, heal with KD, mixed-bit GGUF under a memory budget, heal against fake-quant."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["moe", "reap", "distil", "kd", "gguf", "ollama", "laptop"]
+base_compat = ["ibm-granite/granite-4.0-h-tiny", "Qwen/Qwen3-30B-A3B-Instruct-2507"]
+outputs = ["gguf"]
+
+[targets]
+architectures = ["moe", "hybrid"]
+max_params_b = 40
+
+[footprint]
+max_gb = 4.0                       # GGUF (counted once) + one slot's KV and buffers
+device = "8GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[data_policy]
+licenses_allowed = ["MIT", "Apache-2.0", "BSD-3-Clause", "CC0-1.0", "CC-BY-4.0", "ODC-By-1.0"]
+decontam = ["humaneval", "mbpp", "livecodebench", "muggebench"]
+frontier_spend_usd = 0             # raise to let a frontier teacher write data (asks before spending)
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What the model is for, e.g. \"Code-only agent: write and fix files\""
+
+[inputs.teacher]
+type = "model"
+default = "Qwen/Qwen3-30B-A3B-Instruct-2507"
+help = "Bigger model whose answers the base learns (local on the VM, or frontier:<model>)"
+
+[inputs.prune]
+type = "float"
+default = 0.375
+min = 0.125
+max = 0.5
+advanced = true
+
+[inputs.samples]
+type = "int"
+default = 4000
+min = 500
+max = 50000
+advanced = true
+
+[[stage]]
+id = "teach"
+kind = "data.teacher_gen"
+model = "${inputs.teacher}"
+purpose = "${inputs.purpose}"
+samples = "${inputs.samples}"
+heldout = 200
+answer_max_tokens = 2048
+
+[[stage]]
+kind = "data.decontam"             # MuggeBench, HumanEval, MBPP, LiveCodeBench never enter training
+
+[[stage]]
+id = "distil"
+kind = "sft.lora"                  # the base learns the teacher's answers: the "distilled unpruned" model
+lora_r = 64
+epochs = 2
+
+[[stage]]
+kind = "score.reap"
+
+[[stage]]
+kind = "prune.reap"
+ratio = "${inputs.prune}"
+
+[[stage]]
+id = "heal"
+kind = "heal.kd"
+teacher = "${distil.model}"        # KD from the distilled model, not the original base
+kd_weight = 0.5
+
+[[stage]]
+id = "map"
+kind = "quant.gguf_map"
+saliency = "${score.saliency}"
+head = "q8_0"
+  [[stage.gates]]
+  metric = "predicted_footprint_gb"  # preflight: the planned file plus KV fits before any QAT is spent
+  op = "<="
+  value = 4.0
+
+[[stage]]
+id = "qheal"
+kind = "heal.kd"
+teacher = "${distil.model}"
+fake_quant = "${map.type_map}"
+kd_weight = 1.0
+max_minutes = 45
+
+[[stage]]
+kind = "quant.gguf"
+type_map = "${map.type_map}"
+imatrix = "${map.imatrix}"
+  [[stage.gates]]
+  metric = "parity_kld"
+  op = "<="
+  value = 0.01
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+context = 16384
+kv = "q8_0"
+device = "8GB-VRAM"
+  [[stage.gates]]
+  metric = "footprint_gb"
+  op = "<="
+  value = 4.0
+
+[[stage]]
+id = "bench"
+kind = "eval.bench"
+suites = ["evalplus", "livecodebench", "bfcl"]
+
+[[stage]]
+kind = "package.gguf"
+
+[[stage]]
+kind = "sync.bucket"
+always = true                      # results leave the VM even when a gate stopped the run
+
+[eval]
+suites = ["evalplus", "livecodebench", "bfcl"]
+  [[eval.gates]]
+  metric = "bench.evalplus_kept"   # share of the base model's score kept
+  op = ">="
+  value = 0.90
+  [[eval.gates]]
+  metric = "footprint.footprint_gb"
+  op = "<="
+  value = 4.0

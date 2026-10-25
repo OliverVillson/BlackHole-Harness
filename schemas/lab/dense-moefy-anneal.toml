@@ -1,0 +1,76 @@
+# A BlackHole-Harness original (2026-10-24): MoEfy a dense model WITHOUT a forced top-k (every expert on, so the
+# model is exactly the dense one), then post-train it to route while the active experts step
+# down (64 -> 48 -> 32 -> 24 -> 16), distilling from the dense original at every step. Fixes the
+# one-shot cut measured in lab/dense-moefy-reap (KL 0.53 at 32/64). REAQ / pruning come after.
+#
+# LAB SCHEMA, not yet run. Prototype: reaper/gpu_perf/moefy_anneal.py
+#
+#   detect (dense) -> calib -> convert.moefy (shared expert + E experts, all on)
+#   -> heal.route_anneal (KD from dense, top-k schedule, router ST gate + aux loss)
+#   -> [score.reap -> quant.reaq] -> agreement per k
+
+api = "blackhole/v1"
+id = "lab/dense-moefy-anneal"
+version = "0.1.0"
+title = "MoEfy a dense model, then train it to route"
+description = "Split dense FFNs into experts with all on, then distil while the active experts step down so the router and experts adapt."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["dense", "moefication", "router-training", "kd", "experimental", "lab"]
+outputs = ["safetensors"]
+
+[targets]
+architectures = ["dense"]
+min_params_b = 3
+
+[inputs.experts]
+type = "int"
+default = 64
+min = 8
+max = 128
+advanced = true
+
+[inputs.schedule]
+type = "text"
+default = "64,48,32,24,16"
+help = "Experts on per token, one distillation step each"
+
+[inputs.minutes]
+type = "int"
+default = 180
+help = "Distillation time budget, split equally over the schedule"
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"
+samples = 64
+heldout = 32
+
+[[stage]]
+kind = "convert.moefy"
+experts = "${inputs.experts}"
+shared = 0.125
+split = "cluster"
+router = "ridge"
+top_k = "all"
+
+[[stage]]
+id = "anneal"
+kind = "heal.route_anneal"
+teacher = "${base.model}"
+schedule = "${inputs.schedule}"
+max_minutes = "${inputs.minutes}"
+data = { code = 0.5, chat = 0.3, math = 0.2 }
+lr = 1e-5
+router_lr = 1e-3
+aux_weight = 0.01
+  [[stage.gates]]
+  metric = "kl_at_final_k"
+  op = "<="
+  value = 0.15
+  on_fail = "warn"
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"

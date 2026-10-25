@@ -1,0 +1,131 @@
+# Dense models into the MoE toolkit: MoEfy every FFN, REAP-prune the experts the purpose
+# does not use, heal with KD from the original, then 4-bit GGUF.
+#
+# LAB SCHEMA: measured negative. On Qwen3-8B (B200, 2026-10-23) splitting the FFNs into 64
+# experts cost KL 0.53 at top-32 (0.39 even with an oracle router), because SiLU FFNs are not
+# sparse enough, and REAP on the bolted-on router pruned about as badly as random (KL 0.67 vs
+# 0.71). Dense models use blackhole/dense-prune-int4 instead; this stays for further research.
+#
+#   detect (dense) -> calib -> convert.moefy (dense -> moe) -> score.reap -> prune.reap
+#   -> heal.kd from the dense original -> uniform 4-bit GGUF -> agreement, footprint, bench
+
+api = "blackhole/v1"
+id = "lab/dense-moefy-reap"
+version = "0.1.0"
+title = "MoEfy a dense model, then REAP"
+description = "Split dense FFNs into routed experts, REAP-prune them for a purpose, heal with KD from the original, quantise to 4 bits."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["dense", "moefication", "reap", "kd", "gguf", "experimental", "lab", "negative-result"]
+outputs = ["gguf"]
+
+[targets]
+architectures = ["dense"]
+min_params_b = 3
+
+[footprint]
+device = "8GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What the model is for; it decides which experts survive"
+
+[inputs.experts]
+type = "int"
+default = 16
+min = 4
+max = 64
+advanced = true
+help = "Experts each FFN is split into"
+
+[inputs.top_k]
+type = "int"
+default = 4
+min = 1
+max = 16
+advanced = true
+help = "Experts per token (active FFN share = top_k / experts)"
+
+[inputs.split]
+type = "enum"
+choices = ["cluster", "coact", "random"]
+default = "cluster"
+advanced = true
+
+[inputs.prune]
+type = "float"
+default = 0.25
+min = 0.0
+max = 0.5
+advanced = true
+help = "Share of the new experts REAP drops"
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"          # the dense original writes and answers prompts for the purpose
+purpose = "${inputs.purpose}"
+samples = 512                      # routers need more tokens than REAP scoring (64 was enough there)
+heldout = 64
+
+[[stage]]
+kind = "convert.moefy"
+experts = "${inputs.experts}"
+top_k = "${inputs.top_k}"
+split = "${inputs.split}"
+router = "mlp"
+router_tokens = 2000000
+shared = 0.125
+  [[stage.gates]]
+  metric = "recon_kl"              # before pruning, the MoEfied model should still track the dense one
+  op = "<="
+  value = 0.30
+  on_fail = "warn"
+
+[[stage]]
+kind = "score.reap"
+
+[[stage]]
+kind = "prune.reap"
+ratio = "${inputs.prune}"
+
+[[stage]]
+id = "heal"
+kind = "heal.kd"
+teacher = "${base.model}"          # KD back toward the dense original; routers train too
+kd_weight = 1.0
+max_minutes = 60
+
+[[stage]]
+kind = "quant.gguf"
+type = "Q4_K_M"
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+
+[[stage]]
+id = "bench"
+kind = "eval.bench"
+suites = ["evalplus", "mmlu_pro"]
+
+[[stage]]
+kind = "package.gguf"
+
+[eval]
+suites = ["agreement", "evalplus", "mmlu_pro"]
+  [[eval.gates]]
+  metric = "check.kl"
+  op = "<="
+  value = 0.15
+  [[eval.gates]]
+  metric = "bench.evalplus_kept"
+  op = ">="
+  value = 0.90

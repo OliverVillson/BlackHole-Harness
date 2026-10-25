@@ -1,0 +1,110 @@
+# The default for dense models: quantise harder first, prune last.
+#
+# Dense frontier on Qwen3-8B (B200, 2026-10-23, KL to the original, lower is better):
+#   int8                              9.5 GB   KL 0.0008
+#   GPTQ int4                         6.1 GB   KL 0.028   (round-to-nearest int4: 0.070)
+#   GPTQ int3                         5.3 GB   KL 0.15    (beats every pruned recipe of similar size)
+#   12.5% neuron prune + GPTQ int3    5.0 GB   KL 0.25
+#   25% prune + round-to-nearest int4 5.4 GB   KL 0.26
+#   dropping 4 layers                          KL 0.99    (never used)
+#   closed-form (no-training) heal             worse every time (heal is trained or absent)
+# So: GPTQ int4; GPTQ int3 if the target needs it; then 12.5-25% activation-scored neuron
+# pruning with critical neurons protected and a trained KD heal. plan.fit picks the rung.
+
+api = "blackhole/v1"
+id = "blackhole/dense-prune-int4"
+version = "0.3.0"
+title = "Quantise harder first, prune last"
+description = "GPTQ 4-bit GGUF for any dense model; 3-bit, then neuron pruning with a KD heal, only as a size target needs them."
+author = "blackhole"
+license = "Apache-2.0"
+tags = ["dense", "gptq", "int4", "int3", "gguf", "neuron-pruning", "kd", "default"]
+base_compat = ["Qwen/Qwen3-8B"]
+outputs = ["gguf"]
+
+[targets]
+architectures = ["dense", "hybrid"]
+
+[footprint]
+device = "8GB-VRAM"
+context = 16384
+kv = "q8_0"
+
+[inputs.purpose]
+type = "text"
+required = true
+help = "What the model is for; it is the calibration text, and decides which neurons stay if pruning is needed"
+
+[inputs.max_gb]
+type = "float"
+default = 0.0
+min = 0.0
+help = "Largest model file you can use, in GB; 0 means GPTQ 4-bit"
+
+[[stage]]
+id = "fit"
+kind = "plan.fit"                  # Q4_K_M, else Q3_K_M, else Q3_K_M + 12.5% / 25% neuron pruning
+params_b = "${base.params_b}"
+max_gb = "${inputs.max_gb}"
+  [[stage.gates]]
+  metric = "fits"
+  op = "=="
+  value = true                     # stops with the reason; layer dropping is never tried
+
+[[stage]]
+id = "calib"
+kind = "data.teacher_gen"
+purpose = "${inputs.purpose}"
+samples = 128                      # GPTQ Hessians want a few more sequences than REAP scoring
+heldout = 32
+
+[[stage]]
+kind = "score.neurons"
+when = "${fit.metrics.need_prune}"
+
+[[stage]]
+kind = "prune.neurons"
+when = "${fit.metrics.need_prune}"
+ratio = "${fit.metrics.prune}"
+protect_critical = true
+protect_top = 0.01
+skip_edge = 2
+max_layer = 0.5
+
+[[stage]]
+id = "heal"
+kind = "heal.kd"                   # a trained heal, and only after pruning
+when = "${fit.metrics.need_prune}"
+teacher = "${base.model}"
+kd_weight = 1.0
+max_minutes = 45
+
+[[stage]]
+id = "gptq"
+kind = "quant.gptq"                # error-compensated rounding onto llama.cpp's grid for the chosen type
+data = "${calib.data}"
+grid = "gguf:${fit.metrics.bits}"
+
+[[stage]]
+kind = "quant.gguf"
+type = "${fit.metrics.bits}"
+pre_snapped = true
+
+[[stage]]
+id = "check"
+kind = "eval.agreement"
+heldout = "${calib.heldout}"
+
+[[stage]]
+id = "footprint"
+kind = "eval.footprint"
+
+[[stage]]
+kind = "package.gguf"
+
+[eval]
+suites = ["agreement"]
+  [[eval.gates]]
+  metric = "check.kl"
+  op = "<="
+  value = 0.30
