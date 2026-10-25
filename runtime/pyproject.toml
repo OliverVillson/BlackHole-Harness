@@ -9,7 +9,7 @@ license = "Apache-2.0"
 dependencies = ["torch>=2.4", "triton>=3.0", "safetensors>=0.4"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+dev = ["pytest>=8", "numpy"]   # numpy: the Triton interpreter the CPU tests run on
 
 # vLLM loads general plugins in every one of its processes: this registers the
 # "blackhole-hex" quantization method, so `vllm serve <hex folder>` just works.
