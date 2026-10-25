@@ -48,6 +48,7 @@ project:
 | `install.sh` | one-line installer for a fresh Ubuntu GPU VM |
 | `harness/` | the pipeline that runs today: `blackhole_pipeline` (every stage, MLX export with the HEX Metal kernel, LiveCodeBench, `blackhole-serve`) and the Textual TUI `blackhole_tui` |
 | `reaper/` | REAPer (`reaper_pipeline`, `reaper_hw`, `reaper_tui`): REAP calibration, scoring, pruning, eval, the Flint port; `reaper/gpu_perf/` holds GPTQ, REAQ/HEX tables and the B200 benchmarks |
+| `runtime/` | the BlackHole runtime, kept apart from the pipeline: the HEX Triton MoE kernel for NVIDIA GPUs and the `blackhole-hex` vLLM plugin (see `runtime/README.md`) |
 | `landing/` | the static landing page (Vercel, no build) |
 
 `blackhole/` is where everything is heading: its ops are typed stubs today, and the working
@@ -78,4 +79,5 @@ With `harness/` installed, `blackhole` with no subcommand (or with a model name)
 pip install -e '.[dev,frontier]' && pytest                    # core
 pip install -e 'reaper[pipeline]' -e harness pytest
 pytest reaper/tests harness/tests                             # pipeline on tiny models, CPU
+TRITON_INTERPRET=1 pytest runtime/tests                        # HEX Triton kernel, CPU (pip install triton -e runtime)
 ```

@@ -465,6 +465,7 @@ def test_qwen_mac_schema_on_a_tiny_qwen3_6(tmp_path):
         got = back(input_ids=ids).logits[0].float()
     live = ref > serve.HEAD_FILL
     assert torch.allclose(got[live], ref[live], atol=1e-5)
+    hex_runtime_matches_mlx(xdir, tmp_path / "hex-vllm", cfg)
     try:
         import mlx.core as mx
         from mlx_lm.utils import load_model
@@ -483,3 +484,23 @@ def test_qwen_mac_schema_on_a_tiny_qwen3_6(tmp_path):
             layer.mlp.split_min = 1
     split = np.array(mm(mx.array(ids.numpy()))[0].astype(mx.float32))
     assert np.abs(split[fin] - out[fin]).max() < 1e-4 * np.abs(out[fin]).max()
+
+
+
+def hex_runtime_matches_mlx(xdir: Path, dst: Path, cfg: dict) -> None:
+    """When the BlackHole runtime is installed: its converter turns the MLX HEX export into a
+    blackhole-hex folder (what vLLM serves) whose experts, run through the Triton HEX kernel
+    (interpreted on the CPU, in its own process), give what the MLX folder's dequantized experts
+    give. The pipeline itself never imports the runtime."""
+    import importlib.util
+    if importlib.util.find_spec("blackhole_runtime") is None or importlib.util.find_spec("triton") is None:
+        return
+    env = {**os.environ, "TRITON_INTERPRET": "1", "PYTHONPATH": os.pathsep.join([str(REAPER), str(HARNESS)])}
+    p = subprocess.run([sys.executable, "-m", "blackhole_runtime.verify", str(xdir), str(dst), "--device", "cpu"],
+                       env=env, capture_output=True, text=True, timeout=900)
+    assert p.returncode == 0, p.stdout[-3000:] + p.stderr[-3000:]
+    res = json.loads(p.stdout.strip().splitlines()[-1])
+    assert res["layers"] >= 1 and res["head_ids"] == cfg["head_vocab"]
+    hcfg = json.loads((dst / "config.json").read_text())
+    assert hcfg["quantization_config"]["quant_method"] == "blackhole-hex"
+    assert hcfg["architectures"] == ["Qwen3_5MoeForCausalLM"] and "hex" not in hcfg

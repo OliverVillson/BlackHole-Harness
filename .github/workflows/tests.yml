@@ -23,4 +23,18 @@ jobs:
           python-version: "3.12"
       - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
       - run: pip install -e '.[dev]' -e 'reaper[pipeline]' -e harness pytest
+      # the runtime too (Triton interpreted on the CPU): the Qwen3.6 test converts its MLX export
+      - run: pip install triton -e runtime
       - run: pytest -q reaper/tests reaper/gpu_perf harness/tests tests/test_hex.py
+  runtime:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install triton -e 'runtime[dev]'
+      - run: pytest -q runtime/tests
+        env:
+          TRITON_INTERPRET: "1"
