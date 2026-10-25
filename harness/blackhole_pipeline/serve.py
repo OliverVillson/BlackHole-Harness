@@ -83,11 +83,13 @@ def _unpacked_state(path: Path, dtype):
         yield out
 
 
-def _mlx_state(path: Path, dtype):
+def _mlx_state(path: Path, dtype, hex_parts: dict | None = None):
     """bf16 tensors (the PyTorch model's names) of a BlackHole MLX folder: quantized modules are
     dequantized, names and layouts go back through mlx_layout, and the stacked hot/cold expert
     tensors become one module per expert (Flint) or the fused [E, ...] tensors (Qwen3.5 / 3.6),
-    hot tier first (the router rows are already in that order)."""
+    hot tier first (the router rows are already in that order). With `hex_parts` (a dict), HEX
+    experts are not dequantized: their packed parts go there, under the PyTorch model's names
+    (<mlp>.experts_hot / .experts.<proj>.<part>), for runtimes with a HEX kernel."""
     import torch
     from safetensors.torch import load_file
 
@@ -103,6 +105,10 @@ def _mlx_state(path: Path, dtype):
     out = {}
     for k in [k for k in raw if k.endswith(".levels")]:  # HEX experts: per-expert level tables
         mod = k[:-len(".levels")]
+        if hex_parts is not None:
+            for p in ("idx", "block_scale", "expert_scale", "levels"):
+                hex_parts[f"{lay.to_hf(mod)}.{p}"] = raw.pop(f"{mod}.{p}")
+            continue
         lv = raw.pop(k).float()
         bits = int(lv.shape[-1]).bit_length() - 1
         words = raw.pop(f"{mod}.idx")

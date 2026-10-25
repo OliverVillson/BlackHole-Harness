@@ -1,0 +1,31 @@
+[project]
+name = "blackhole-runtime"
+version = "0.1.0"
+description = "BlackHole runtime: fast kernels and serving for models made with BlackHole-Harness (HEX experts on NVIDIA via Triton, vLLM plugin)."
+requires-python = ">=3.10"
+license = "Apache-2.0"
+# Kept apart from the pipeline: nothing in the pipeline imports this package. Install it next to
+# vLLM (on the VM: ~/vllm-venv). Converting an MLX export (convert.py) also needs blackhole-pipeline.
+dependencies = ["torch>=2.4", "triton>=3.0", "safetensors>=0.4"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+# vLLM loads general plugins in every one of its processes: this registers the
+# "blackhole-hex" quantization method, so `vllm serve <hex folder>` just works.
+[project.entry-points."vllm.general_plugins"]
+blackhole_hex = "blackhole_runtime.vllm_hex:register"
+
+[project.scripts]
+blackhole-hex-check = "blackhole_runtime.hex_check:main"
+blackhole-hex-convert = "blackhole_runtime.convert:main"
+
+[tool.setuptools.packages.find]
+include = ["blackhole_runtime*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
