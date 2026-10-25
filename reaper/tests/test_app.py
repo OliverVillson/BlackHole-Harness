@@ -133,6 +133,11 @@ def test_machine_panel_with_reaper_hw(monkeypatch, tmp_path):
     monkeypatch.setattr(det, "_disk_free", lambda path: 1800.0)
     monkeypatch.setenv("REAPER_HOME", str(tmp_path))
     monkeypatch.setenv("HF_HUB_OFFLINE", "1")  # config lookups fail fast; marketplace sizes are used
+    # huggingface_hub reads HF_HUB_OFFLINE at import, so also make the download itself fail
+    hub = pytest.importorskip("huggingface_hub")
+    monkeypatch.setattr(hub, "hf_hub_download", lambda *a, **k: (_ for _ in ()).throw(OSError("offline")))
+    import reaper_hw.model
+    reaper_hw.model.model_info.cache_clear()
 
     async def run():
         app = Reaper()
