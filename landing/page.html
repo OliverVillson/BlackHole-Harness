@@ -51,7 +51,7 @@ code, .mono { font-family: var(--mono); font-size: .88em; }
 body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--void); }
 .top .wrap { display: flex; align-items: center; justify-content: space-between; gap: 16px; height: 56px; }
 .brand { font: 700 18px/1 var(--display); color: var(--photon); text-decoration: none; display: flex; align-items: center; gap: 10px; letter-spacing: .02em; }
-.brand i { width: 18px; height: 18px; border-radius: 50%; background: var(--void); box-shadow: 0 0 0 2px var(--flare), 0 0 10px 3px var(--ember), 0 0 22px 6px var(--crimson); }
+.brand svg { width: 24px; height: 24px; flex: none; }
 .brand b { color: var(--ember); font-weight: 700; }
 .top nav { display: flex; gap: 22px; font: 500 14px/1 var(--mono); }
 .top nav a { color: var(--dim); text-decoration: none; }
@@ -60,14 +60,14 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 /* ── hero ──────────────────────────────────────── */
 .hero { padding-block: 48px 0; }
-.banner { font: 400 var(--bfs, 13px)/1 var(--mono); white-space: pre; margin: 0; letter-spacing: 0; overflow: hidden; }
-.banner .tag { color: var(--photon); font-weight: 600; }
+.banner svg { display: block; width: 100%; max-width: 700px; height: auto; }
+.banner text { font: 600 1.7px var(--mono); fill: var(--photon); }
 .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.05fr); gap: 40px; align-items: center; margin-top: 34px; }
 .hero h1 { font-size: clamp(38px, 6vw, 68px); line-height: .98; font-weight: 700; }
 .hero h1 em { font-style: normal; color: var(--ember); }
 .hero .lede { font-size: 18px; }
-.hole { margin: 0; font: 400 var(--hfs, 11px)/1 var(--mono); white-space: pre; justify-self: center; letter-spacing: 0; }
-.hole span { display: inline; }
+.hole { display: flex; justify-content: center; min-width: 0; }
+.hole canvas { display: block; }
 .cta { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 30px; align-items: stretch; }
 .cmd { display: flex; align-items: center; gap: 12px; background: var(--panel); border: 1px solid var(--crimson); padding: 12px 12px 12px 16px; font: 400 15px/1.2 var(--mono); color: var(--photon); min-width: 0; max-width: 100%; }
 .cmd .p { color: var(--ember); }
@@ -196,7 +196,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#top" aria-label="BlackHole-Harness home"><i aria-hidden="true"></i>BlackHole<b>·</b>Harness</a>
+    <a class="brand" href="#top" aria-label="BlackHole-Harness home"><svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="mt" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="7.63"><stop offset="0.49" stop-color="#ffae42"/><stop offset="0.64" stop-color="#ff6a00"/><stop offset="0.81" stop-color="#d7261e"/><stop offset="0.92" stop-color="#9e1b07"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><radialGradient id="mb" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="5.95"><stop offset="0.62" stop-color="#ff6a00"/><stop offset="0.79" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><linearGradient id="md" gradientUnits="userSpaceOnUse" x1="0.47" y1="0" x2="23.53" y2="0"><stop offset="0" stop-color="#9e1b07"/><stop offset=".22" stop-color="#ff6a00"/><stop offset=".42" stop-color="#f5efe6"/><stop offset=".6" stop-color="#ffae42"/><stop offset=".8" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07"/></linearGradient></defs><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="url(#md)"/><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="#000000" fill-opacity=".45"/><path d="M4.37 12A7.63 7.63 0 0 1 19.63 12L15.72 12A3.72 3.72 0 0 0 8.28 12Z" fill="url(#mt)"/><path d="M6.05 12A5.95 5.95 0 0 0 17.95 12L15.72 12A3.72 3.72 0 0 1 8.28 12Z" fill="url(#mb)"/><circle cx="12" cy="12" r="3.72" fill="#000000"/><circle cx="12" cy="12" r="4.06" fill="none" stroke="#f5efe6" stroke-width="0.68"/><path d="M0.47 12A11.53 2.65 0 0 0 23.53 12L17.21 12A5.21 1.2 0 0 1 6.79 12Z" fill="url(#md)"/></svg>BlackHole<b>·</b>Harness</a>
     <nav aria-label="Sections">
       <a href="#results">results</a>
       <a href="#how">how it works</a>
@@ -210,7 +210,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 <main id="top">
   <div class="hero">
     <div class="wrap">
-      <pre class="banner" id="banner" aria-label="BLACKHOLE harness"></pre>
+      <div class="banner" id="banner" role="img" aria-label="BLACKHOLE harness"></div>
       <div class="hero-grid">
         <div>
           <h1>Collapse any open model until it fits <em>your&nbsp;machine</em>.</h1>
@@ -221,7 +221,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
           </div>
           <p class="status"><b>early preview</b> · open source, Apache-2.0 · first release lands with the public repo</p>
         </div>
-        <pre class="hole" id="hole" role="img" aria-label="A black hole drawn in orange and red terminal blocks, with a tilted accretion disk"></pre>
+        <div class="hole"><canvas id="hole" role="img" aria-label="A black hole drawn in orange and red pixels, with a tilted accretion disk"></canvas></div>
       </div>
     </div>
   </div>
@@ -415,102 +415,116 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 "██╔══██╗██║     ██╔══██║██║     ██╔═██╗ ██╔══██║██║   ██║██║     ██╔══╝  ",
 "██████╔╝███████╗██║  ██║╚██████╗██║  ██╗██║  ██║╚██████╔╝███████╗███████╗",
 "╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝"];
-  const esc = s => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+  const TAG = "harness";
+  // banner: drawn as vector cells so the block letters tile without font seams.
+  // Each letter takes one step of the heat gradient; the box-drawing shadow strokes
+  // are drawn as the same double lines a terminal shows, in ash. A cell is 1 x 2.
+  const W = BANNER[0].length, A = 0.3, B = 0.7, C = 0.75, D = 1.25;
+  const solid = x => BANNER.some(l => l[x] === "█");
+  const LETTER = [];
+  for (let x = 0, n = -1; x < W; x++) { if (solid(x) && !solid(x - 1)) n++; LETTER.push(Math.max(n, 0)); }
+  const LETTERS = LETTER[W - 1] + 1;
+  const SHADOW = {
+    "║": [[[A, 0], [A, 2]], [[B, 0], [B, 2]]],
+    "═": [[[0, C], [1, C]], [[0, D], [1, D]]],
+    "╗": [[[0, C], [B, C], [B, 2]], [[0, D], [A, D], [A, 2]]],
+    "╔": [[[1, C], [A, C], [A, 2]], [[1, D], [B, D], [B, 2]]],
+    "╝": [[[0, D], [B, D], [B, 0]], [[0, C], [A, C], [A, 0]]],
+    "╚": [[[1, D], [A, D], [A, 0]], [[1, C], [B, C], [B, 0]]],
+  };
+  const fills = {};
+  let lines = "";
+  BANNER.forEach((line, y) => [...line].forEach((ch, x) => {
+    if (ch === "█") {
+      const c = GRAD[Math.floor(LETTER[x] * GRAD.length / LETTERS)];
+      fills[c] = (fills[c] || "") + `M${x} ${y * 2}h1v2h-1z`;
+    } else if (SHADOW[ch]) {
+      for (const seg of SHADOW[ch]) lines += "M" + seg.map(([u, v]) => `${x + u} ${y * 2 + v}`).join("L");
+    }
+  }));
+  const VW = W + 2 + 7;
+  document.getElementById("banner").innerHTML =
+    `<svg viewBox="0 0 ${VW} ${BANNER.length * 2}" aria-hidden="true">` +
+    `<path d="${lines}" fill="none" stroke="${HEAT[0]}" stroke-width=".14"/>` +
+    Object.entries(fills).map(([c, d]) => `<path d="${d}" fill="${c}" shape-rendering="crispEdges"/>`).join("") +
+    `<text x="${W + 2}" y="${(BANNER.length - 2) * 2 + 1.55}">${TAG}</text></svg>`;
 
-  // banner: solid strokes take the heat gradient by column, shadow strokes stay ash
-  const W = BANNER[0].length;
-  let b = "";
-  BANNER.forEach((line, y) => {
-    let run = "", col = null;
-    const flush = () => { if (run) b += col ? `<span style="color:${col}">${esc(run)}</span>` : run; run = ""; };
-    [...line].forEach((ch, x) => {
-      const c = ch === "█" ? GRAD[Math.min(GRAD.length - 1, Math.floor(x * GRAD.length / W))] : ch === " " ? null : HEAT[0];
-      if (c !== col) { flush(); col = c; }
-      run += ch;
-    });
-    flush();
-    if (y === BANNER.length - 2) b += `  <span class="tag">harness</span>`;
-    b += "\n";
-  });
-  const banner = document.getElementById("banner");
-  banner.innerHTML = b.trimEnd();
-
-  // the hole: same lensing model as the TUI's art.py, sampled onto half-block cells
+  // the hole: the same lensing model as the TUI's art.py, drawn as square pixels
   const DIN = 1.4, DOUT = 3.1, TILT = 0.17;
-  function intensity(x, y, t) {
+  function intensity(x, y, px, t) {
     const r = Math.hypot(x, y);
     if (y >= 0) {
       const rho = Math.hypot(x, y / TILT);
-      if (rho >= DIN && rho <= DOUT && Math.abs(y) <= 0.62) {
+      if (rho >= DIN && rho <= DOUT) {
         const phi = Math.atan2(y / TILT, x);
         const fall = (DOUT - rho) / (DOUT - DIN);
         const beam = 1 + 0.45 * (-x / rho);
-        const streak = 0.82 + 0.18 * Math.sin(phi * 9 + rho * 6 - t);
-        let v = (0.25 + 0.75 * fall ** 1.4) * beam * streak;
-        if (r < 1) v *= 1.05;
-        return Math.min(v, 1);
+        const swirl = 0.9 + 0.1 * Math.sin(phi * 3 + rho * 2 - t);
+        return Math.min((0.25 + 0.75 * fall ** 1.4) * beam * swirl, 1);
       }
     }
     if (r < 1) return 0;
-    const ring = Math.exp(-(((r - 1.07) / 0.055) ** 2));
+    const d = Math.abs(r - 1 - 0.5 * px) / px;  // pixels from the photon ring's centre line
+    const ring = d <= 0.6 ? 1 : Math.exp(-(((d - 0.6) / 0.7) ** 2));
+    const above = Math.min(1, Math.max(0, 1 - y / 0.45));
+    const edge = 1.57 + 0.5 * above;
     let halo = 0;
-    if (r > 1.08 && r < 2.25) {
-      const edge = 1.12 + (y < 0 ? 0.95 : 0.45);
-      if (r < edge) {
-        const k = (r - 1.08) / (edge - 1.08);
-        halo = (1 - k) ** 1.6 * (y < 0 ? 0.85 : 0.5);
-        halo *= 1 + 0.35 * (-x / r);
-        halo *= 0.85 + 0.15 * Math.sin(Math.atan2(y, x) * 11 + r * 5 - t * 0.6);
-      }
+    if (r < edge) {
+      const k = (r - 1) / (edge - 1);
+      halo = (1 - k) ** 1.6 * (0.5 + 0.35 * above);
+      halo *= 1 + 0.35 * (-x / r);
+      halo *= 0.94 + 0.06 * Math.sin(Math.atan2(y, x) * 2 + r * 2 - t * 0.6);
     }
     let back = 0;
     if (y < 0) {
       const rho = Math.hypot(x, y / TILT);
-      if (rho >= DIN && rho <= DOUT && Math.abs(y) <= 0.62)
-        back = 0.55 * (DOUT - rho) / (DOUT - DIN) * (1 + 0.4 * (-x / rho));
+      if (rho >= DIN && rho <= DOUT) back = 0.55 * (DOUT - rho) / (DOUT - DIN) * (1 + 0.4 * (-x / rho));
     }
     const glow = r < DOUT + 0.3 ? 0.1 * Math.exp(-Math.max(0, r - 1.1) * 1.6) : 0;
     return Math.min(1, Math.max(ring * 0.95, halo, back, glow));
   }
   const CUTS = [0.06, 0.16, 0.3, 0.46, 0.64, 0.82];
   const idx = v => { for (let i = 0; i < CUTS.length; i++) if (v < CUTS[i]) return i; return CUTS.length; };
-  const COLS = 64, ROWS = 26;
-  function render(t) {
-    const ph = ROWS * 2, unit = (COLS / 2) / (DOUT + 0.1);
+  const COLS = 64, PH = 52, UNIT = (COLS / 2) / (DOUT + 0.1);
+  const grid = t => {
     const g = [];
-    for (let py = 0; py < ph; py++) {
+    for (let py = 0; py < PH; py++) {
       const l = [];
       for (let px = 0; px < COLS; px++)
-        l.push(idx(intensity((px + 0.5 - COLS / 2) / unit, (py + 0.5 - ph / 2) / unit, t)));
+        l.push(idx(intensity((px + 0.5 - COLS / 2) / UNIT, (py + 0.5 - PH / 2) / UNIT, 1 / UNIT, t)));
       g.push(l);
     }
-    let first = g.findIndex(l => l.some(Boolean)), last = g.length - 1;
-    while (last > 0 && !g[last].some(Boolean)) last--;
-    first = Math.floor(first / 2) * 2; last = Math.floor(last / 2) * 2 + 1;
-    let out = "";
-    for (let y = first; y < last; y += 2) {
-      for (let x = 0; x < COLS; x++) {
-        const a = g[y][x], c = g[y + 1][x];
-        const ct = a ? HEAT[a - 1] : null, cb = c ? HEAT[c - 1] : null;
-        if (!ct && !cb) out += " ";
-        else if (ct === cb) out += `<span style="color:${ct}">█</span>`;
-        else if (!cb) out += `<span style="color:${ct}">▀</span>`;
-        else if (!ct) out += `<span style="color:${cb}">▄</span>`;
-        else out += `<span style="color:${ct};background:${cb}">▀</span>`;
-      }
-      out += "\n";
-    }
-    return out.trimEnd();
-  }
+    return g;
+  };
+  // crop to the lit rows once, so the canvas keeps its size while the disk turns
+  const g0 = grid(0);
+  const TOP = g0.findIndex(l => l.some(Boolean));
+  let BOT = PH - 1;
+  while (BOT > 0 && !g0[BOT].some(Boolean)) BOT--;
+  const ROWS = BOT - TOP + 1;
   const hole = document.getElementById("hole");
-  hole.innerHTML = render(0);
+  const ctx = hole.getContext("2d");
+  let k = 1;
+  function draw(g) {
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, hole.width, hole.height);
+    for (let y = 0; y < ROWS; y++)
+      for (let x = 0; x < COLS; x++) {
+        const v = g[TOP + y][x];
+        if (v) { ctx.fillStyle = HEAT[v - 1]; ctx.fillRect(x * k, y * k, k, k); }
+      }
+  }
 
-  // size both pieces of terminal art to their column so they never overflow
+  // whole device pixels per art pixel, so every square comes out the same size
   function fit() {
-    const bw = banner.parentElement.clientWidth;
-    banner.style.setProperty("--bfs", Math.min(14, bw / (W + 11) / 0.6).toFixed(2) + "px");
-    const hw = hole.parentElement.clientWidth;
-    hole.style.setProperty("--hfs", Math.min(13, hw / COLS / 0.6).toFixed(2) + "px");
+    const dpr = devicePixelRatio || 1;
+    const room = Math.min(hole.parentElement.clientWidth, 560);
+    k = Math.max(1, Math.floor(room * dpr / COLS));
+    hole.width = COLS * k;
+    hole.height = ROWS * k;
+    hole.style.width = (COLS * k / dpr) + "px";
+    hole.style.height = (ROWS * k / dpr) + "px";
+    draw(g0);
   }
   fit();
   addEventListener("resize", fit);
@@ -522,7 +536,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   function tick(now) {
     if (!still.matches && visible && !document.hidden && now - last > 90) {
       last = now;
-      hole.innerHTML = render((now - t0) / 700);
+      draw(grid((now - t0) / 700));
     }
     requestAnimationFrame(tick);
   }

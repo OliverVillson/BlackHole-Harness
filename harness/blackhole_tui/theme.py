@@ -13,6 +13,7 @@ FLARE = "#ffae42"      # highlights, done marks
 PHOTON = "#f5efe6"     # the bit of white: titles, the photon ring
 DIM = "#8a5a44"        # secondary text
 TEXT = "#f0dccb"       # body text, warm off-white
+TRACK = "#1a0703"      # scrollbar track: just visible on the void, so a thumb reads as a scrollbar
 
 # accretion-disk steps from coolest to hottest (index 0 is unlit = VOID)
 HEAT = [ASH, CRIMSON, REDSHIFT, EMBER, FLARE, PHOTON]
@@ -81,7 +82,7 @@ Button {{ background: {VOID}; color: {TEXT}; border: tall {CRIMSON}; }}
 Button:hover, Button:focus {{ background: {EMBER}; color: {VOID}; text-style: bold; }}
 Input {{ background: {VOID}; border: tall {ASH}; }}
 Input:focus {{ border: tall {EMBER}; }}
-DataTable {{ background: {VOID}; height: auto; scrollbar-color: {CRIMSON}; scrollbar-background: {VOID}; }}
+DataTable {{ background: {VOID}; height: auto; scrollbar-color: {CRIMSON}; scrollbar-background: {TRACK}; }}
 DataTable > .datatable--header {{ background: {VOID}; color: {FLARE}; text-style: bold; }}
 DataTable > .datatable--cursor {{ background: {EMBER}; color: {VOID}; text-style: bold; }}
 DataTable > .datatable--hover {{ background: {ASH}; }}
