@@ -28,10 +28,12 @@ project:
 
 ## The three BlackHole products
 
-1. **BlackHole-Harness** (this repo, free): the training pipeline harness. Preset recipes
+All three are open source under Apache-2.0.
+
+1. **BlackHole-Harness** (this repo): the training pipeline harness. Preset recipes
    (schemas) that run on any open model, the TUI, the VM tooling, and the open format layer
    `blackhole.anatomy` (safetensors IO, the HEX layout and quantizer, format table).
-2. **BlackHole-Dev** (paid): the dev training harness. The developer API that opens any model
+2. **[BlackHole-Dev](https://github.com/OliverVillson/BlackHole-Dev)**: the dev training harness. The developer API that opens any model
    as objects (layers, heads, routers, experts with REAP scores, neurons, single weights),
    edits them, and packages manipulations as named functions schemas call through `model.edit`.
    Installs on top of this package.
@@ -81,3 +83,7 @@ pip install -e 'reaper[pipeline]' -e harness pytest
 pytest reaper/tests harness/tests                             # pipeline on tiny models, CPU
 TRITON_INTERPRET=1 pytest runtime/tests                        # HEX Triton kernel, CPU (pip install triton -e runtime)
 ```
+
+## Licence
+
+Apache-2.0, see [LICENSE](LICENSE). Models you make keep their base model's licence.
