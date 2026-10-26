@@ -21,6 +21,8 @@ def params(cfg: dict) -> dict:
     """Run parameters: DEFAULTS, overridden by the schema steps' params and top-level keys."""
     p = dict(DEFAULTS)
     for step in cfg.get("steps") or []:
+        if step.get("kind") == "fn":   # a recipe's job function reads its own params
+            continue
         sp = step.get("params") or {}
         if step.get("kind") == "reap" and "prune" in sp:
             p["prune"] = float(sp["prune"])
@@ -52,7 +54,8 @@ class BHJob:
             c = Config(model=self.config["model"], purpose=self.config.get("purpose", ""),
                        prune=self.params["prune"], calib_samples=self.params["calib_samples"],
                        quant="fp8-experts")
-            given = {k: v for st in self.config.get("steps") or [] for k, v in (st.get("params") or {}).items()}
+            given = {k: v for st in self.config.get("steps") or [] if st.get("kind") != "fn"
+                     for k, v in (st.get("params") or {}).items()}
             given.update(self.config)
             for f in fields(Config):  # REAPer settings in the job config or schema steps (calib, max_seq, ...)
                 if f.name in given and f.name not in ("model", "purpose", "prune", "quant", "calib_samples"):
