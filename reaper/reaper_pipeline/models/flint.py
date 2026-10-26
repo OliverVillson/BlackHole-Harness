@@ -1,7 +1,8 @@
 """Recursive's Flint (RecursiveSI/flint) in plain PyTorch, for REAP scoring and eval.
 
-transformers has no Flint yet, so REAPer registers this one for model_type
-"flint" (only when transformers does not know it). Written from the vLLM
+REAPer registers this one for model_type "flint", also over transformers' own
+Flint (5.21+): the pipeline's stages call its layers directly and were measured
+with it. Written from the vLLM
 implementation's semantics and the checkpoint's tensor names:
 
 - 49 layers; `layer_types` picks sliding (window 513, counting the current
@@ -683,11 +684,10 @@ def _sample(logits, temperature: float, top_p: float, generator=None, top_k: int
 
 
 def register() -> bool:
-    """Make AutoConfig / AutoModelForCausalLM load model_type "flint". False when transformers has its own."""
+    """Make AutoConfig / AutoModelForCausalLM load model_type "flint" with this implementation,
+    also when transformers ships its own (5.21+): heal calls the decoder layers with this
+    one's signature, and every Flint result was measured with it."""
     from transformers import AutoConfig, AutoModelForCausalLM
-    from transformers.models.auto.configuration_auto import CONFIG_MAPPING
-    if "flint" in CONFIG_MAPPING:
-        return CONFIG_MAPPING["flint"] is FlintConfig
-    AutoConfig.register("flint", FlintConfig)
-    AutoModelForCausalLM.register(FlintConfig, FlintForCausalLM)
+    AutoConfig.register("flint", FlintConfig, exist_ok=True)
+    AutoModelForCausalLM.register(FlintConfig, FlintForCausalLM, exist_ok=True)
     return True
