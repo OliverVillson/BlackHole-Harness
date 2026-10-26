@@ -15,8 +15,8 @@ from rich.text import Text
 
 from blackhole_tui.theme import BANNER_GRADIENT, HEAT, SHADOW_EDGE
 
-# "BLACKHOLE" in figlet ansi_shadow. Solid strokes get the heat gradient, the
-# box-drawing shadow strokes stay dark red.
+# "BLACKHOLE" in figlet ansi_shadow. Each letter takes one step of the heat
+# gradient, left to right; the box-drawing shadow strokes stay dark red.
 BANNER = """\
 ██████╗ ██╗      █████╗  ██████╗██╗  ██╗██╗  ██╗ ██████╗ ██╗     ███████╗
 ██╔══██╗██║     ██╔══██╗██╔════╝██║ ██╔╝██║  ██║██╔═══██╗██║     ██╔════╝
@@ -26,15 +26,29 @@ BANNER = """\
 ╚═════╝ ╚══════╝╚═╝  ╚═╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚══════╝"""
 
 
-def banner(tag: str = "harness") -> Text:
+def _letter_of_column() -> list[int]:
+    """Letter index (0..8) for every column of BANNER: the letters are the runs of
+    columns that hold a solid block in any row."""
     lines = BANNER.splitlines()
     width = max(len(l) for l in lines)
+    solid = [any(x < len(l) and l[x] == "█" for l in lines) for x in range(width)]
+    letter, out = -1, []
+    for x in range(width):
+        if solid[x] and (x == 0 or not solid[x - 1]):
+            letter += 1
+        out.append(max(letter, 0))
+    return out
+
+
+def banner(tag: str = "harness") -> Text:
+    lines = BANNER.splitlines()
+    letters = _letter_of_column()
+    n = letters[-1] + 1
     out = Text(no_wrap=True)
     for y, line in enumerate(lines):
         for x, ch in enumerate(line):
             if ch == "█":
-                g = BANNER_GRADIENT[min(len(BANNER_GRADIENT) - 1, x * len(BANNER_GRADIENT) // width)]
-                out.append(ch, style=g)
+                out.append(ch, style=BANNER_GRADIENT[letters[x] * len(BANNER_GRADIENT) // n])
             elif ch != " ":
                 out.append(ch, style=SHADOW_EDGE)
             else:
@@ -47,48 +61,49 @@ def banner(tag: str = "harness") -> Text:
 
 
 DISK_IN, DISK_OUT = 1.4, 3.1
+TILT = 0.17  # sin of the disk's inclination: how flat it looks
 
 
-def _intensity(x: float, y: float) -> float:
-    """Brightness 0..1 at (x, y), in units of the shadow radius; +y is down."""
+def _intensity(x: float, y: float, px: float) -> float:
+    """Brightness 0..1 at (x, y), in units of the shadow radius; +y is down.
+    px is the size of one pixel in the same units, so the photon ring can be
+    drawn one pixel wide at any size instead of breaking into dots."""
     r = math.hypot(x, y)
-    tilt = 0.17  # sin of the disk's inclination: how flat it looks
 
     # the near side of the disk passes in front of the shadow
     if y >= 0:
-        rho = math.hypot(x, y / tilt)
-        if DISK_IN <= rho <= DISK_OUT and abs(y) <= 0.62:
-            phi = math.atan2(y / tilt, x)
+        rho = math.hypot(x, y / TILT)
+        if DISK_IN <= rho <= DISK_OUT:
+            phi = math.atan2(y / TILT, x)
             fall = (DISK_OUT - rho) / (DISK_OUT - DISK_IN)
             beam = 1.0 + 0.45 * (-x / rho)  # approaching side (left) is brighter
-            streak = 0.82 + 0.18 * math.sin(phi * 9 + rho * 6)
-            v = (0.25 + 0.75 * fall ** 1.4) * beam * streak
-            if r < 1.0:
-                v *= 1.05
-            return min(v, 1.0)
+            swirl = 0.9 + 0.1 * math.sin(phi * 3 + rho * 2)  # a few broad arcs, no speckle
+            return min((0.25 + 0.75 * fall ** 1.4) * beam * swirl, 1.0)
 
     if r < 1.0:
         return 0.0  # event horizon
 
-    # photon ring hugging the shadow
-    ring = math.exp(-((r - 1.07) / 0.055) ** 2)
+    # photon ring hugging the shadow: every pixel within 0.6 px of its centre line is
+    # fully lit, which gives an unbroken one-pixel ring at any size, then a short glow
+    d = abs(r - 1.0 - 0.5 * px) / px
+    ring = 1.0 if d <= 0.6 else math.exp(-((d - 0.6) / 0.7) ** 2)
 
-    # far side of the disk, lensed into a halo; thick on top, thin underneath
+    # far side of the disk, lensed into a halo: thick over the top and right down
+    # to the disk, thin underneath
+    above = min(1.0, max(0.0, 1.0 - y / 0.45))
     halo = 0.0
-    if 1.08 < r < 2.25:
-        thick = 0.95 if y < 0 else 0.45
-        edge = 1.12 + thick
-        if r < edge:
-            t = (r - 1.08) / (edge - 1.08)
-            halo = (1 - t) ** 1.6 * (0.85 if y < 0 else 0.5)
-            halo *= 1.0 + 0.35 * (-x / r)
-            halo *= 0.85 + 0.15 * math.sin(math.atan2(y, x) * 11 + r * 5)
+    edge = 1.57 + 0.5 * above
+    if r < edge:
+        t = (r - 1.0) / (edge - 1.0)
+        halo = (1 - t) ** 1.6 * (0.5 + 0.35 * above)
+        halo *= 1.0 + 0.35 * (-x / r)
+        halo *= 0.94 + 0.06 * math.sin(math.atan2(y, x) * 2 + r * 2)
 
     # far side of the disk, behind the hole, visible past the shadow's edge
     back = 0.0
     if y < 0:
-        rho = math.hypot(x, y / tilt)
-        if DISK_IN <= rho <= DISK_OUT and abs(y) <= 0.62:
+        rho = math.hypot(x, y / TILT)
+        if DISK_IN <= rho <= DISK_OUT:
             back = 0.55 * (DISK_OUT - rho) / (DISK_OUT - DISK_IN) * (1.0 + 0.4 * (-x / rho))
 
     # faint glow around everything
@@ -117,7 +132,7 @@ def render(cols: int, rows: int, scale: float = 1.0) -> Text:
         for px in range(cols):
             x = (px + 0.5 - cols / 2) / unit
             y = (py + 0.5 - px_h / 2) / unit
-            line.append(_palette_index(_intensity(x, y)))
+            line.append(_palette_index(_intensity(x, y, 1 / unit)))
         grid.append(line)
 
     lit = [i for i, l in enumerate(grid) if any(l)]
