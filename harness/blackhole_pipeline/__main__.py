@@ -1,4 +1,5 @@
 """Run a TUI job: python -m blackhole_pipeline --job DIR [--from STAGE]
+Run a recipe bundle: python -m blackhole_pipeline --job DIR --recipe X.bhr [--model M] [--input k=v ...]
 
 Each stage group runs as its own process (REAPer's or ours), its output is relayed to
 stdout (DIR/events.log when the TUI started us) and teed to DIR/reaper/logs/<process>.log.
@@ -55,6 +56,9 @@ def run_process(name: str, who: str, bh: BHJob, rj) -> tuple[int, list[str], dic
     if who == "reaper":
         py = os.environ.get("REAPER_VLLM_PY") if name == "calibrate" else None
         cmd = [py or sys.executable, "-u", "-m", f"reaper_pipeline.stages.{name}", "--job", str(rj.root)]
+    elif who == "fn":   # a recipe's job function (blackhole.jobfn entry point, e.g. blackhole_dev's)
+        from blackhole_pipeline.recipe import jobfn_module
+        cmd = [sys.executable, "-u", "-m", jobfn_module(), "--job", str(bh.root), "--stage", name]
     else:
         cmd = [sys.executable, "-u", "-m", f"blackhole_pipeline.stages.{name}", "--job", str(bh.root)]
     env = {k: str(v) for k, v in ((rj.read("plan.json") or {}).get("env") or {}).items()}
@@ -208,8 +212,10 @@ def rekeep(rj) -> None:
     rj.write("work/reap.json", r)
 
 
-def schema_stages(schema: str | None) -> set[str]:
-    """The stages a schema runs (its stage_list); empty = every stage."""
+def schema_stages(schema: str | None, config: dict | None = None) -> set[str]:
+    """The stages a schema runs (its stage_list); empty = every stage. A recipe job carries its own."""
+    if config and config.get("stage_list"):
+        return set(config["stage_list"])
     try:
         from blackhole_tui.catalog import SCHEMAS
     except ImportError:
@@ -220,13 +226,21 @@ def schema_stages(schema: str | None) -> set[str]:
 
 def run(bh: BHJob, start: str | None = None) -> int:
     rj = bh.reaper()
+    order = bh.config.get("stage_list") or STAGES
     if start:
-        rj.clear_from(STAGES, start)
+        if start not in order:
+            emit("pipeline", "error", msg=f"--from {start}: not a stage of this job ({', '.join(order)})", outcome="error")
+            return 2
+        rj.clear_from(list(order), start)
     p = bh.params
     emit("pipeline", "running", 0, f"started {time.strftime('%Y-%m-%d %H:%M:%S')}")
     log(f"job {bh.root.name}: {bh.config['model']} · schema {bh.config.get('schema')} · REAP {p['prune']:.0%}")
-    wanted = schema_stages(bh.config.get("schema"))
-    for name, stages, who in PROCESSES:
+    wanted = schema_stages(bh.config.get("schema"), bh.config)
+    procs = PROCESSES
+    if bh.config.get("stage_list"):   # a recipe: its stages in its order, job functions included
+        from blackhole_pipeline.recipe import processes
+        procs = processes(bh.config["stage_list"])
+    for name, stages, who in procs:
         if wanted and not any(s in wanted for s in stages):
             continue
         if name == "calibrate":
@@ -243,6 +257,9 @@ def run(bh: BHJob, start: str | None = None) -> int:
             rekeep(rj)  # a saliency.json from another prune ratio
         emit(next(s for s in stages if not rj.is_done(s)), "running", 0, "starting")
         rc, tail, last = run_process(name, who, bh, rj)
+        if who == "fn" and rc == 3:   # a job function's stop gate failed: end cleanly, like the core runner
+            emit("pipeline", "done", 100, f"stopped: a gate of {name} failed", outcome="stopped", gates_passed=False)
+            return 0
         failed = next((s for s in stages if not rj.is_done(s)), None)
         if rc != 0 or failed:
             stage = failed or (last or {}).get("stage") or stages[-1]
@@ -271,8 +288,22 @@ def _stop(signum, _frame):
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--job", required=True, help="TUI job directory (holds config.json)")
-    ap.add_argument("--from", dest="start", choices=STAGES, help="rerun from this stage onward")
+    ap.add_argument("--from", dest="start", help="rerun from this stage onward")
+    ap.add_argument("--recipe", help="a recipe bundle (.bhr) from BlackHole-Dev; writes DIR/config.json when missing")
+    ap.add_argument("--model", help="with --recipe: the base model (default: the recipe's)")
+    ap.add_argument("--input", action="append", default=[], metavar="K=V", help="with --recipe: a recipe input")
     a = ap.parse_args(argv)
+    if a.recipe:
+        from blackhole_pipeline.recipe import RecipeBundleError, prepare, run_core
+        try:
+            cfg = prepare(Path(a.job), a.recipe, a.model, dict(kv.split("=", 1) for kv in a.input))
+        except (RecipeBundleError, ValueError) as e:
+            emit("pipeline", "error", msg=f"recipe: {e}"[:400], outcome="error")
+            return 2
+        if cfg.get("runner") == "core":
+            return run_core(Path(a.job), cfg, a.start)
+    elif a.input or a.model:
+        ap.error("--model and --input go with --recipe")
     venv = Path.home() / "vllm-venv" / "bin" / "python"   # setup-vllm.sh: vLLM in its own venv
     if venv.exists() and not os.environ.get("BLACKHOLE_NO_VLLM"):
         os.environ.setdefault("REAPER_VLLM_PY", str(venv))
