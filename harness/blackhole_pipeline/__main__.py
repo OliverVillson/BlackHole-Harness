@@ -257,6 +257,9 @@ def run(bh: BHJob, start: str | None = None) -> int:
             rekeep(rj)  # a saliency.json from another prune ratio
         emit(next(s for s in stages if not rj.is_done(s)), "running", 0, "starting")
         rc, tail, last = run_process(name, who, bh, rj)
+        if who == "fn" and rc == 3:   # a job function's stop gate failed: end cleanly, like the core runner
+            emit("pipeline", "done", 100, f"stopped: a gate of {name} failed", outcome="stopped", gates_passed=False)
+            return 0
         failed = next((s for s in stages if not rj.is_done(s)), None)
         if rc != 0 or failed:
             stage = failed or (last or {}).get("stage") or stages[-1]

@@ -14,7 +14,7 @@ without blackhole_dev. Two kinds of recipe:
   pipeline  stages `pipeline.<stage>` (this pipeline's stages: reap, heal, gptq, reaq, mlx, qheal,
             bench, quant, package) and `job.fn` (a named job function, e.g. a forked distil, run as
             `python -m <module> --job DIR --stage ID` with <module> from the `blackhole.jobfn`
-            entry point group), in recipe order. detect, plan, weights and calibrate always run
+            entry point group; exit 3 = a stop gate failed, which ends the run cleanly), in recipe order. detect, plan, weights and calibrate always run
             first; pipeline.reap reports score and prune, then eval.
   core      catalog ops (blackhole.ops, incl. blackhole_dev's model.edit through the `blackhole.ops`
             entry point), run by blackhole.core.runner.

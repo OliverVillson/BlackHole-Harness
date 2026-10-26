@@ -129,6 +129,11 @@ def test_a_job_function_stage_runs_in_recipe_order(tmp_path, monkeypatch):
     # --from accepts the recipe's own stage names and refuses others
     assert pm.run(BHJob(job), "distil") == 0
     assert pm.run(BHJob(job), "qheal") == 2
+    # exit 3 from a job function = a stop gate failed: the run stops cleanly
+    (mods / "fake_jobfn.py").write_text("import sys\nsys.exit(3)\n")
+    lines.clear()
+    assert pm.run(BHJob(job), "distil") == 0
+    assert lines[-1]["status"] == "done" and lines[-1]["outcome"] == "stopped" and lines[-1]["gates_passed"] is False
 
 
 def test_main_reports_a_bad_bundle_as_an_event(tmp_path, capsys):
