@@ -309,3 +309,111 @@ def test_down_saves_the_cache_before_deleting(keys, tmp_path):
     cloud.down(m.name, yes=True, say=lambda s: None, get_provider=lambda n: p,
                save=lambda host, ident, say: order.append(("save", host)))
     assert order == [("save", "me@203.0.113.7"), "delete"]
+
+
+# ---------------------------------------------------------------- down: list, pick, all, forget
+
+from blackhole.cloud import cli as cloud_cli
+
+
+@pytest.fixture
+def fleet(keys, monkeypatch):
+    """Two rented VMs and one machine set up with --host; down goes to a fake provider."""
+    p = FakeProvider()
+    real = cloud.down
+    monkeypatch.setattr(cloud, "down", lambda name, **k: real(
+        name, get_provider=lambda n: p, run=lambda *a, **kw: Done(""), save=lambda *a, **kw: None, **k))
+    monkeypatch.setattr(cloud, "outputs", lambda m, run=None: ["/home/me/.blackhole/jobs/flint/out"] if m.name == "bh-a" else [])
+    for n, addr in [("bh-a", "203.0.113.7"), ("bh-b", "203.0.113.8")]:
+        Machine(n, "nebius", "b300", "1gpu", "us", "me", address=addr, state="running", usd_per_hour=6.1).save()
+    cloud.bring_own("ubuntu@198.51.100.9", do_install=lambda *a, **k: None, restore=lambda *a, **k: None,
+                    say=lambda s: None, provider_name="nebius")
+    return p
+
+
+def _run(argv, answers=None):
+    said, asked = [], []
+
+    def ask(q):
+        asked.append(q)
+        return answers.pop(0) if answers else ""
+    code = cloud_cli.main(argv, say=said.append, ask=ask if answers is not None else None)
+    return code, said, asked
+
+
+def test_bare_down_with_nothing_is_not_an_error(keys):
+    code, said, _ = _run(["down"])
+    assert code == 0 and "nothing to delete" in said[0]
+    assert any("console.nebius.com" in s for s in said)
+
+
+def test_up_host_is_recorded_and_listed(fleet):
+    m = Machine.find("ubuntu@198.51.100.9")
+    assert m and not m.managed and m.provider == "nebius" and m.name == "ubuntu-198-51-100-9"
+    code, said, _ = _run(["machines"])
+    assert code == 0 and any("can only forget" in s for s in said)
+
+
+def test_down_all_asks_once_then_deletes_rented_and_forgets_own(fleet):
+    code, said, asked = _run(["down", "--all"], answers=["y"])
+    assert code == 0 and len(asked) == 1
+    assert "Delete 2 VMs and forget 1 host? This cannot be undone." in asked[0]
+    assert any("would be lost: /home/me/.blackhole/jobs/flint/out" in s for s in said)
+    assert fleet.calls == ["delete", "delete"] and Machine.all() == []
+    assert any("still running and billing" in s and "console.nebius.com" in s for s in said)
+
+
+def test_down_all_no_keeps_everything(fleet):
+    code, said, _ = _run(["down", "--all"], answers=["n"])
+    assert code == 0 and fleet.calls == [] and len(Machine.all()) == 3 and said[-1] == "nothing deleted"
+
+
+def test_down_all_without_a_terminal_needs_yes(fleet):
+    code, said, _ = _run(["down", "--all"])
+    assert code == 2 and fleet.calls == [] and "--yes" in said[-1]
+    code, _, _ = _run(["down", "--all", "--yes"])
+    assert code == 0 and fleet.calls == ["delete", "delete"] and Machine.all() == []
+
+
+def test_bare_down_offers_a_numbered_pick(fleet):
+    code, _, asked = _run(["down"], answers=["2", "yes"])
+    assert code == 0 and asked[0].startswith("Which? 1-3")
+    assert fleet.calls == ["delete"] and {m.name for m in Machine.all()} == {"bh-a", "ubuntu-198-51-100-9"}
+
+
+def test_bare_down_with_several_and_no_terminal_lists_them(fleet):
+    code, said, _ = _run(["down"])
+    assert code == 2 and fleet.calls == [] and sum("bh-" in s for s in said) >= 2
+
+
+def test_down_by_address_and_forget_never_touches_the_vm(fleet):
+    code, said, _ = _run(["down", "me@203.0.113.8", "--forget"])
+    assert code == 0 and fleet.calls == [] and Machine.find("bh-b") is None
+    assert said[0] == "forgot bh-b (me@203.0.113.8)" and "console.nebius.com" in said[1]
+
+
+def test_down_on_an_own_machine_only_forgets_it(fleet):
+    code, said, _ = _run(["down", "ubuntu-198-51-100-9", "--yes"])
+    assert code == 0 and fleet.calls == [] and Machine.find("ubuntu@198.51.100.9") is None
+    assert any("cannot be deleted from here" in s for s in said)
+    code, said, _ = _run(["down", "ubuntu@198.51.100.9"])     # gone now: still a clear answer
+    assert code == 0 and "no record" in said[0]
+
+
+def test_down_on_a_host_it_never_knew_points_at_the_consoles(keys):
+    code, said, _ = _run(["down", "oliver-reaper@204.12.178.65"])
+    assert code == 0 and "did not rent it" in said[0]
+    assert any("console.nebius.com" in s for s in said) and any("cloud.lambda.ai" in s for s in said)
+
+
+def test_down_one_without_a_terminal_keeps_the_models_check(fleet):
+    code, _, _ = _run(["down", "bh-b"])
+    assert code == 0 and fleet.calls == ["delete"]
+
+
+def test_old_records_without_managed_still_load(keys):
+    folder = cloud.machines_dir()
+    folder.mkdir(parents=True)
+    (folder / "bh-old.json").write_text(json.dumps({"name": "bh-old", "provider": "nebius", "gpu": "b200", "size": "s",
+                                                    "region": "r", "login": "blackhole"}))
+    assert Machine.load("bh-old").managed
