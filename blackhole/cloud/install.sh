@@ -1,52 +1,65 @@
 #!/usr/bin/env bash
-# BlackHole-Harness installer for a fresh Ubuntu GPU VM.
+# BlackHole-Harness installer for a GPU VM (Ubuntu 22.04/24.04 with an NVIDIA driver).
 #
-#   curl -fsSL https://raw.githubusercontent.com/OliverVillson/BlackHole-Harness/main/install.sh | bash
-#   curl -fsSL .../install.sh | bash -s -- --vllm yes --from ./checkout
+#   curl -fsSL https://blackholeharness.dev/install.sh | bash
+#   curl -fsSL https://blackholeharness.dev/install.sh | bash -s -- --ref some-branch
 #
-# What it does, each step skipped when already done:
-#   1. apt: python3-venv python3-dev git tmux build-essential (only the missing ones)
-#   2. reads the GPU with nvidia-smi and picks a torch build that has kernels for it
+# One command, safe to rerun: every step checks first and only does what is missing, and a rerun
+# updates the checkout and the packages. What it does:
+#   1. apt: python3-venv python3-dev git tmux build-essential curl rsync (only the missing ones)
+#   2. reads the GPU with nvidia-smi and picks a torch build with kernels for it
 #      (torch >= 2.7: cu130 on driver 580+, cu128 on R570; Blackwell refuses older drivers)
-#   3. venv in $BLACKHOLE_HOME/venv (Ubuntu's system Python is externally managed)
-#   4. torch, then blackhole-harness[gpu]
-#   5. vLLM in its own venv ($BLACKHOLE_HOME/vllm, found through BLACKHOLE_VLLM_PY), since
-#      vLLM pins its own torch; llama.cpp for GGUF ops when asked
-#   6. checks torch really runs on the GPU, and puts `blackhole` and `bh` on PATH
+#   3. clones or updates the BlackHole-Harness checkout (~/BlackHole-Harness, branch main)
+#   4. one venv ($BLACKHOLE_HOME/venv) with torch, the whole harness, editable from the checkout:
+#      blackhole (CLI), reaper[pipeline], harness (pipeline + TUI), runtime (Triton HEX kernels),
+#      flash-linear-attention (Qwen3.5/3.6 training), mlx[cpu] (checking MLX exports)
+#   5. vLLM in its own venv ($BLACKHOLE_HOME/vllm: vLLM pins its own torch) with REAPer and the
+#      blackhole-hex vLLM plugin next to it
+#   6. checks torch on the GPU and every package, puts `blackhole` and `bh` on PATH
+#
+# Machines set up by hand before this installer (~/bh-venv, ~/vllm-venv) are reused in place, and
+# fresh installs get those two names as links, so older notes and the BlackHole-Dev app find them.
 #
 # Lessons carried over from REAPer on the Nebius B200: apt's python3-torch has no sm_100
 # kernels, Blackwell needs a cu128 torch >= 2.7 and driver 570+, and FlashInfer's JIT
 # kernels need nvcc, so vLLM runs with the prebuilt FLASH_ATTN backend.
 set -euo pipefail
 
+REPO_URL="https://github.com/OliverVillson/BlackHole-Harness.git"
+
 main() {
   BH_HOME="${BLACKHOLE_HOME:-$HOME/.blackhole}"
-  BH_FROM="${BLACKHOLE_FROM:-git+https://github.com/OliverVillson/BlackHole-Harness.git}"
+  SRC="${BLACKHOLE_SRC:-$HOME/BlackHole-Harness}"
+  FROM="${BLACKHOLE_FROM:-}"   # a local checkout to install as it is, or a git URL to clone
+  REF="${BLACKHOLE_REF:-main}"
   BH_EXTRAS="gpu"
   VLLM="auto"         # auto | yes | no
   LLAMACPP="no"       # yes | no
   LLAMACPP_REF="${LLAMACPP_REF:-}"   # a llama.cpp tag; empty = the newest bNNNN release
   TORCH_INDEX=""      # override with --torch-index
+  EXTRAS_OPT=1        # flash-linear-attention, mlx[cpu]: best effort
   DRY=0
 
   APT=1
   while [ $# -gt 0 ]; do
     case "$1" in
-      --from) BH_FROM="$2"; shift ;;
+      --from) FROM="$2"; shift ;;
+      --ref) REF="$2"; shift ;;
+      --src) SRC="$2"; shift ;;
       --home) BH_HOME="$2"; shift ;;
       --extras) BH_EXTRAS="$2"; shift ;;
       --vllm) VLLM="$2"; shift ;;
       --llamacpp) LLAMACPP="$2"; shift ;;
       --torch-index) TORCH_INDEX="$2"; shift ;;
+      --minimal) EXTRAS_OPT=0 ;;
       --no-apt) APT=0 ;;
       --dry-run) DRY=1 ;;
-      -y|--yes) ;;  # nothing asks yet; accepted so cloud-init lines stay stable
+      -y|--yes) ;;  # nothing asks; accepted so cloud-init lines stay stable
       -h|--help) usage; exit 0 ;;
       *) die "unknown option $1 (see --help)" ;;
     esac
     shift
   done
-  VENV="$BH_HOME/venv"
   mkdir -p "$BH_HOME"
   LOG="$BH_HOME/install.log"
   : >"$LOG"
@@ -56,9 +69,12 @@ main() {
   if [ "$APT" = 1 ]; then apt_deps; fi
   detect_gpu
   pick_torch
+  checkout
+  pick_venvs
   make_venv
   install_torch
   install_harness
+  install_optional
   install_vllm
   install_llamacpp
   verify
@@ -69,14 +85,16 @@ main() {
 usage() {
   cat <<'EOF'
 install.sh [options]
-  --from SPEC         what to pip install: a git URL, a local checkout or a PyPI name
-                      (default git+https://github.com/OliverVillson/BlackHole-Harness.git)
+  --ref REF           branch or tag of BlackHole-Harness to install (default main)
+  --src DIR           where the checkout lives (default ~/BlackHole-Harness)
+  --from PATH|URL     install this local checkout as it is (no git), or clone this git URL
   --home DIR          where the venvs, models and jobs live (default $BLACKHOLE_HOME or ~/.blackhole)
   --extras LIST       pip extras of blackhole-harness (default gpu; e.g. gpu,frontier)
   --vllm auto|yes|no  vLLM in its own venv for a fast teacher (auto: yes when a GPU has >= 40 GB)
   --llamacpp yes|no   build llama.cpp for the GGUF ops (default no; schemas that need it ask)
   --torch-index URL   force a torch wheel index, e.g. https://download.pytorch.org/whl/cu126
-  --no-apt            skip apt (no sudo); python3-venv must already be there
+  --minimal           skip flash-linear-attention and mlx[cpu]
+  --no-apt            skip apt (no sudo); python3-venv, git and tmux must already be there
   --dry-run           print what would run, change nothing
   -y, --yes           no questions
 EOF
@@ -91,13 +109,27 @@ fi
 say()  { printf '%s◉%s %s\n' "$O" "$N" "$*"; }
 ok()   { printf '%s✓%s %s\n' "$W" "$N" "$*"; }
 warn() { printf '%s!%s %s\n' "$O" "$N" "$*" >&2; }
-die()  { printf '%s✗ %s%s\n' "$R" "$*" "$N" >&2; [ -n "${LOG:-}" ] && printf '%s  log: %s%s\n' "$D" "$LOG" "$N" >&2; exit 1; }
+die()  {
+  printf '%s✗ %s%s\n' "$R" "$*" "$N" >&2
+  if [ -n "${LOG:-}" ] && [ -s "$LOG" ]; then
+    printf '%s  last lines of %s:%s\n' "$D" "$LOG" "$N" >&2
+    tail -n 15 "$LOG" | sed 's/^/    /' >&2
+  fi
+  exit 1
+}
 
 # run a command, or print it with --dry-run; output goes to the log
 run() {
   if [ "$DRY" = 1 ]; then printf '%s  $ %s%s\n' "$D" "$*" "$N"; return 0; fi
   printf '\n$ %s\n' "$*" >>"$LOG"
   "$@" >>"$LOG" 2>&1 || die "failed: $*"
+}
+
+# the same, but a failure is only a warning (optional extras)
+try() {
+  if [ "$DRY" = 1 ]; then printf '%s  $ %s%s\n' "$D" "$*" "$N"; return 0; fi
+  printf '\n$ %s\n' "$*" >>"$LOG"
+  "$@" >>"$LOG" 2>&1
 }
 
 banner() {
@@ -125,7 +157,7 @@ check_os() {
       *) warn "${PRETTY_NAME:-unknown OS}: tested on Ubuntu 22.04 and 24.04" ;;
     esac
   fi
-  [ "$(id -u)" = 0 ] && warn "running as root: the venv goes in $BH_HOME (better: a normal user with sudo)"
+  [ "$(id -u)" = 0 ] && warn "running as root: everything goes in $BH_HOME (better: a normal user with sudo)"
   return 0
 }
 
@@ -133,12 +165,16 @@ SUDO=""
 apt_deps() {
   command -v apt-get >/dev/null || { warn "no apt-get: install python3-venv, python3-dev, git, tmux yourself"; return; }
   [ "$(id -u)" = 0 ] || SUDO="sudo"
-  local want=(python3-venv python3-dev python3-pip git tmux build-essential curl rsync) missing=()
+  local v want missing=()
+  v=$(python3 -c 'import sys; print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || true)
+  # Ubuntu ships python3.X-venv per version, and Triton builds a small CUDA helper with gcc and
+  # Python.h on first use
+  want=(python3-venv python3-dev python3-pip git tmux build-essential curl rsync ca-certificates)
+  [ -n "$v" ] && want+=("python$v-venv" "python$v-dev")
   [ "$LLAMACPP" = yes ] && want+=(cmake libcurl4-openssl-dev)
   for p in "${want[@]}"; do
     dpkg -s "$p" >/dev/null 2>&1 || missing+=("$p")
   done
-  # Ubuntu ships python3.X-venv per version; python3-venv pulls the right one.
   if [ ${#missing[@]} -eq 0 ]; then ok "system packages already there"; return; fi
   say "apt install ${missing[*]}"
   run $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -qq
@@ -204,11 +240,66 @@ pick_torch() {
   say "torch from ${TORCH_INDEX##*/} for sm_${GPU_CC/./}"
 }
 
+# ---------- the checkout: everything installs editable from it, so `git pull` + rerun updates
+checkout() {
+  local url="$REPO_URL"
+  if [ -n "$FROM" ] && [ -d "$FROM" ]; then
+    SRC="$(cd "$FROM" && pwd)"
+    [ -f "$SRC/pyproject.toml" ] && [ -d "$SRC/harness" ] || die "$SRC is not a BlackHole-Harness checkout"
+    ok "installing the checkout $SRC as it is"
+    return
+  fi
+  [ -n "$FROM" ] && url="${FROM#git+}"
+  command -v git >/dev/null || die "no git (drop --no-apt, or apt install git)"
+  if [ ! -e "$SRC" ]; then
+    say "git clone $url ($REF) into $SRC"
+    run git clone -q --branch "$REF" "$url" "$SRC"
+    ok "checkout $SRC at $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo "$REF")"
+    return
+  fi
+  [ -d "$SRC/.git" ] || die "$SRC exists and is not a git checkout; move it away or pass --src DIR"
+  local origin
+  origin=$(git -C "$SRC" remote get-url origin 2>/dev/null || true)
+  if [ "$(norm_url "$origin")" != "$(norm_url "$url")" ]; then
+    # an older checkout of another repo (or a fork) in the same place: keep it, next to the new one
+    local old="$SRC.old-$(date +%Y%m%d-%H%M%S)"
+    warn "$SRC is a checkout of ${origin:-no remote}, not $url; moving it to $old"
+    run mv "$SRC" "$old"
+    run git clone -q --branch "$REF" "$url" "$SRC"
+    ok "checkout $SRC at $(git -C "$SRC" rev-parse --short HEAD 2>/dev/null || echo "$REF")"
+    return
+  fi
+  say "updating $SRC to $REF"
+  run git -C "$SRC" fetch -q origin "$REF"
+  if [ -n "$(git -C "$SRC" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    local stamp="blackhole install $(date +%Y-%m-%dT%H:%M:%S)"
+    warn "local edits in $SRC kept in git stash (\"$stamp\"); git -C $SRC stash pop brings them back"
+    run git -C "$SRC" stash push -q -m "$stamp"
+  fi
+  if git -C "$SRC" show-ref -q --verify "refs/remotes/origin/$REF"; then
+    run git -C "$SRC" checkout -q -B "$REF" "origin/$REF"   # a branch: follow origin exactly
+  else
+    run git -C "$SRC" checkout -q FETCH_HEAD                 # a tag or a commit
+  fi
+  ok "checkout $SRC at $REF ($(git -C "$SRC" rev-parse --short HEAD))"
+}
+
+norm_url() { local u="${1%/}"; u="${u%.git}"; u="${u#git+}"; u="${u#https://}"; u="${u#http://}"; u="${u#git@}"; echo "${u/://}" | tr A-Z a-z; }
+
+# ---------- venvs: the main one and vLLM's; earlier hand-made ones are reused where they are
+pick_venvs() {
+  VENV="$BH_HOME/venv"; VLLM_VENV="$BH_HOME/vllm"
+  if [ ! -e "$VENV" ] && [ -x "$HOME/bh-venv/bin/python" ]; then VENV="$HOME/bh-venv"; say "reusing $VENV"; fi
+  if [ ! -e "$VLLM_VENV" ] && [ -x "$HOME/vllm-venv/bin/python" ]; then VLLM_VENV="$HOME/vllm-venv"; say "reusing $VLLM_VENV"; fi
+  return 0
+}
+
 make_venv() {
-  if [ -x "$VENV/bin/python" ]; then ok "venv $VENV"; return; fi
+  if [ -x "$VENV/bin/python" ] && "$VENV/bin/python" -m pip --version >/dev/null 2>&1; then ok "venv $VENV"; return; fi
   command -v python3 >/dev/null || die "no python3"
   python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))' || die "python $(python3 -V) is too old, need 3.11+ (Ubuntu 24.04 has 3.12)"
   say "venv $VENV"
+  [ "$DRY" = 1 ] || rm -rf "$VENV"
   run python3 -m venv "$VENV"
   run "$VENV/bin/python" -m pip install -q --upgrade pip wheel setuptools
 }
@@ -235,40 +326,55 @@ EOF
 }
 
 install_harness() {
-  local spec="$BH_FROM"
-  if [ -d "$spec" ]; then spec="$(cd "$spec" && pwd)"; fi
-  # extras go in brackets; for a git URL that means "name[extras] @ git+..."
-  if [ -n "$BH_EXTRAS" ]; then
-    case "$spec" in
-      git+*) spec="blackhole-harness[$BH_EXTRAS] @ $spec" ;;
-      /*) spec="${spec}[$BH_EXTRAS]" ;;
-      *\[*) ;;
-      *) spec="${spec}[$BH_EXTRAS]" ;;
-    esac
-  fi
-  say "pip install $spec"
-  # keep the torch we just picked: pip must not swap it for PyPI's build
-  PIP "$spec" --extra-index-url "$TORCH_INDEX"
+  local root="$SRC" extras=""
+  [ -n "$BH_EXTRAS" ] && extras="[$BH_EXTRAS]"
+  say "pip install the harness: blackhole, reaper, pipeline + TUI, runtime (editable from $SRC)"
+  # torch stays the build picked above: its index is searched too, so pip never swaps it for PyPI's.
+  # The root package goes last: its `blackhole` (up, validate, describe, market) still opens the TUI.
+  PIP -e "$root/reaper[pipeline]" -e "$root/harness" -e "$root/runtime" --extra-index-url "$TORCH_INDEX"
+  PIP -e "$root$extras" --extra-index-url "$TORCH_INDEX"
   ok "harness"
+}
+
+install_optional() {
+  [ "$EXTRAS_OPT" = 1 ] || return 0
+  # Qwen3.5 / 3.6 linear attention (Gated DeltaNet) kernels: without them training runs a slow
+  # PyTorch reference
+  if try "$VENV/bin/python" -m pip install -q flash-linear-attention --extra-index-url "$TORCH_INDEX"; then
+    ok "flash-linear-attention"
+  else
+    warn "flash-linear-attention did not install: Qwen3.5/3.6 training will be slow"
+  fi
+  # mlx[cpu] lets the pipeline load its own MLX exports to check them before they ship
+  if try "$VENV/bin/python" -m pip install -q "mlx[cpu]" mlx-lm --extra-index-url "$TORCH_INDEX"; then
+    ok "mlx[cpu] for checking MLX exports"
+  else
+    warn "mlx[cpu] did not install: MLX exports are written but not test-loaded here"
+  fi
 }
 
 install_vllm() {
   case "$VLLM" in
-    no) return ;;
-    auto) [ -n "$GPU_NAME" ] && [ "$GPU_MEM" -ge 40 ] || { say "skipping vLLM (--vllm yes to force)"; return; } ;;
+    no) return 0 ;;
+    auto) if [ -z "$GPU_NAME" ] || [ "$GPU_MEM" -lt 40 ]; then say "skipping vLLM (--vllm yes to force)"; return 0; fi ;;
     yes) ;;
     *) die "--vllm takes auto, yes or no" ;;
   esac
-  # vLLM pins an exact torch; in the main venv it would replace the one picked above.
-  VLLM_VENV="$BH_HOME/vllm"
+  # vLLM pins an exact torch; in the main venv it would replace the one picked above. REAPer goes
+  # in too (calibrate runs under vLLM's Python), and the runtime registers the blackhole-hex
+  # quantization so `vllm serve` loads HEX models.
   if [ -x "$VLLM_VENV/bin/python" ] && "$VLLM_VENV/bin/python" -c 'import vllm' 2>/dev/null; then
-    ok "vLLM already there"; return
+    ok "vLLM already there ($VLLM_VENV)"
+  else
+    say "vLLM in its own venv $VLLM_VENV (a few GB)"
+    [ "$DRY" = 1 ] || rm -rf "$VLLM_VENV"
+    run python3 -m venv "$VLLM_VENV"
+    run "$VLLM_VENV/bin/python" -m pip install -q --upgrade pip
+    run "$VLLM_VENV/bin/python" -m pip install -q vllm ninja
+    ok "vLLM"
   fi
-  say "vLLM in its own venv $VLLM_VENV (a few GB)"
-  [ -x "$VLLM_VENV/bin/python" ] || run python3 -m venv "$VLLM_VENV"
-  run "$VLLM_VENV/bin/python" -m pip install -q --upgrade pip
-  run "$VLLM_VENV/bin/python" -m pip install -q vllm --extra-index-url "$TORCH_INDEX"
-  ok "vLLM"
+  run "$VLLM_VENV/bin/python" -m pip install -q ninja -e "$SRC/reaper[pipeline]" -e "$SRC/runtime"
+  ok "REAPer and the blackhole-hex plugin next to vLLM"
 }
 
 install_llamacpp() {
@@ -306,24 +412,48 @@ EOF
     die "torch cannot use the GPU. Try: $VENV/bin/pip install --force-reinstall 'torch>=2.7' --index-url $TORCH_INDEX"
   fi
   if [ -n "$GPU_NAME" ]; then ok "GPU works from torch"; else ok "torch works (CPU only: demo mode)"; fi
+  out=$("$VENV/bin/python" -c 'import blackhole, blackhole_pipeline, blackhole_tui, reaper_pipeline, blackhole_runtime; import transformers; print("transformers", transformers.__version__)' 2>&1) \
+    || die "the harness does not import: $out"
+  ok "blackhole, pipeline, TUI, REAPer and runtime import ($out)"
+  if [ -x "$VLLM_VENV/bin/python" ] && [ "$VLLM" != no ]; then
+    out=$("$VLLM_VENV/bin/python" - <<'EOF' 2>&1
+import vllm
+from vllm import ModelRegistry as R
+import reaper_pipeline, blackhole_runtime
+qwen = "yes" if "Qwen3_5MoeForConditionalGeneration" in R.get_supported_archs() else "NO"
+print(f"vllm {vllm.__version__} · Qwen3.5/3.6 MoE {qwen}")
+EOF
+) && ok "$out" || warn "vLLM does not import ($out): the pipeline falls back to slower transformers generation"
+  fi
 }
 
 link_bin() {
   [ "$DRY" = 1 ] && return
-  local bin="$HOME/.local/bin"
+  local bin="$HOME/.local/bin" vllm_py=""
   mkdir -p "$bin"
-  # one launcher: the harness's own command, or REAPer's while the harness package is being built
-  cat >"$bin/blackhole" <<EOF
-#!/usr/bin/env bash
+  [ -x "$VLLM_VENV/bin/python" ] && vllm_py="$VLLM_VENV/bin/python"
+  # the old names, so notes that say `source ~/bh-venv/bin/activate` keep working, and the
+  # pipeline's own fallback (~/vllm-venv) finds vLLM
+  [ -e "$HOME/bh-venv" ] || ln -s "$VENV" "$HOME/bh-venv"
+  [ -n "$vllm_py" ] && { [ -e "$HOME/vllm-venv" ] || ln -s "$VLLM_VENV" "$HOME/vllm-venv"; }
+  # one environment file, sourced by the launcher; `source ~/.blackhole/env.sh` gives a shell the same
+  cat >"$BH_HOME/env.sh" <<EOF
+# written by the BlackHole-Harness installer; rerun it to rewrite
 export BLACKHOLE_HOME="$BH_HOME"
+export BLACKHOLE_SRC="$SRC"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 # every compile cache in one folder, which blackhole down/up carries between VMs (cold vLLM start:
 # ~7 min on a B200, warm: ~50 s)
 export VLLM_CACHE_ROOT="$BH_HOME/cache/compile/vllm" TORCHINDUCTOR_CACHE_DIR="$BH_HOME/cache/compile/inductor"
 export TRITON_CACHE_DIR="$BH_HOME/cache/compile/triton" FLASHINFER_WORKSPACE_BASE="$BH_HOME/cache/compile"
-$( [ -x "$BH_HOME/vllm/bin/python" ] && printf 'export BLACKHOLE_VLLM_PY=%s REAPER_VLLM_PY=%s\n' "$BH_HOME/vllm/bin/python" "$BH_HOME/vllm/bin/python" )
+$( [ -n "$vllm_py" ] && printf 'export BLACKHOLE_VLLM_PY=%s REAPER_VLLM_PY=%s\n' "$vllm_py" "$vllm_py" )
 $( [ -d "$BH_HOME/llama.cpp/build/bin" ] && printf 'export BLACKHOLE_LLAMACPP=%s\n' "$BH_HOME/llama.cpp" )
 $( [ "${GPU_CC%%.*}" -ge 10 ] 2>/dev/null && printf 'export VLLM_ATTENTION_BACKEND=FLASH_ATTN VLLM_USE_FLASHINFER_SAMPLER=0\n' )
+case ":\$PATH:" in *":$VENV/bin:"*) ;; *) export PATH="$VENV/bin:\$PATH" ;; esac
+EOF
+  cat >"$bin/blackhole" <<EOF
+#!/usr/bin/env bash
+. "$BH_HOME/env.sh"
 for cmd in blackhole bh reaper; do
   [ -x "$VENV/bin/\$cmd" ] && exec "$VENV/bin/\$cmd" "\$@"
 done
@@ -341,6 +471,7 @@ done_msg() {
   printf '\n%s  installed.%s  From your laptop:\n\n' "$W" "$N"
   printf '    %sssh -t %s@<vm-ip> blackhole%s\n\n' "$O" "$(id -un)" "$N"
   printf '  or here: %sblackhole%s (open a new shell first if it is not found)\n' "$O" "$N"
+  printf '  update later: run the same install command again\n'
   [ "$DRY" = 1 ] && printf '%s  (dry run: nothing was changed)%s\n' "$D" "$N"
   return 0
 }

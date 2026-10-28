@@ -230,6 +230,25 @@ def test_installer_ships_beside_the_module():
     assert subprocess.run(["bash", "-n", str(cloud.INSTALLER)]).returncode == 0
 
 
+def test_installer_copies_match():
+    # the root copy is what curl | bash fetches, the package copy is what `blackhole up` sends
+    root = Path(__file__).resolve().parents[1] / "install.sh"
+    assert root.read_bytes() == cloud.INSTALLER.read_bytes(), "cp install.sh blackhole/cloud/install.sh"
+
+
+def test_installer_dry_run_installs_every_package(tmp_path):
+    repo = Path(__file__).resolve().parents[1]
+    env = {"HOME": str(tmp_path), "PATH": "/usr/bin:/bin"}
+    done = subprocess.run(["bash", str(cloud.INSTALLER), "--dry-run", "--no-apt", "--from", str(repo),
+                           "--home", str(tmp_path / "bh"), "--torch-index", "https://example.invalid/whl"],
+                          capture_output=True, text=True, env=env)
+    assert done.returncode == 0, done.stderr
+    out = done.stdout
+    for part in ("reaper[pipeline]", "/harness", "/runtime", f"-e {repo}[gpu]", "flash-linear-attention"):
+        assert part in out, part
+    assert "nothing was changed" in out and not (tmp_path / "bh" / "venv").exists()
+
+
 # ---------------------------------------------------------------- the compile cache
 
 

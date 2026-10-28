@@ -33,7 +33,8 @@ def main(argv: list[str] | None = None, say=print) -> int:
     u.add_argument("--resume", metavar="NAME", help="start a stopped machine again")
     u.add_argument("--vllm", choices=["auto", "yes", "no"], default="auto")
     u.add_argument("--llamacpp", action="store_true", help="also build llama.cpp for the GGUF ops")
-    u.add_argument("--from", dest="source", help="what install.sh pip installs (a git URL or a PyPI spec)")
+    u.add_argument("--from", dest="source", help="what install.sh installs: a git URL to clone instead of BlackHole-Harness")
+    u.add_argument("--ref", help="branch or tag of BlackHole-Harness to install (default main)")
     u.add_argument("-y", "--yes", action="store_true", help="really rent it")
     d = sub.add_parser("down", help="stop (--keep-disk) or delete a machine")
     d.add_argument("name", nargs="?")
@@ -58,7 +59,7 @@ def main(argv: list[str] | None = None, say=print) -> int:
             return 0
         if a.cmd == "up":
             args = ["--vllm", a.vllm] + (["--llamacpp", "yes"] if a.llamacpp else []) + \
-                (["--from", a.source] if a.source else [])
+                (["--from", a.source] if a.source else []) + (["--ref", a.ref] if a.ref else [])
             if a.host:
                 cloud.bring_own(a.host, port=a.port, install_args=args, say=say)
             elif a.resume:
