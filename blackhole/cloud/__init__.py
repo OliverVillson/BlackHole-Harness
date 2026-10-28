@@ -4,6 +4,8 @@
     blackhole up --host ubuntu@203.0.113.7            # a machine you already have (RunPod, Vast, your own box)
     blackhole ssh [name]                              # open the TUI on it
     blackhole down [name] [--keep-disk]               # stop (disk kept) or delete (the compile cache is saved here first)
+    blackhole down --all                              # every machine, after one confirmation
+    blackhole down <name|user@host> --forget          # drop the record only; the VM itself is not touched
     blackhole machines                                # what this laptop has rented and not returned
 
 Providers are small classes with offer/create/status/stop/start/delete (nebius.py, evroc.py,
@@ -14,6 +16,8 @@ over SSH, so its output streams here, and then `ssh -t <host> blackhole` opens t
 Every machine has a record in $BLACKHOLE_HOME/machines/<name>.json, written before the first
 resource is asked for, so a machine whose `up` died half way is still found and returned
 (the pattern from mugge.cloud, which drives evroc this way for `mugge run --host evroc`).
+`up --host` writes one too (managed false), so a machine you set up yourself is listed and can be
+forgotten; `down` never deletes those, it says where to delete them by hand.
 """
 
 from __future__ import annotations
@@ -84,6 +88,8 @@ class Machine:
     resources: list[list[str]] = field(default_factory=list)   # provider-specific, in the order made
     state: str = "creating"          # creating | running | stopped
     usd_per_hour: float | None = None
+    managed: bool = True             # False: set up with `up --host`; blackhole cannot delete it
+    port: int | None = None          # SSH port, for `up --host user@ip --port N`
 
     @property
     def host(self) -> str:
@@ -103,6 +109,14 @@ class Machine:
         if not path.exists():
             raise CloudError(f"no machine {name} (see `blackhole machines`)")
         return cls(**json.loads(path.read_text(encoding="utf-8")))
+
+    def matches(self, what: str) -> bool:
+        """By name, user@address or bare address, so `down` takes what `machines` prints."""
+        return what in (self.name, self.address) or bool(self.address and what == self.host)
+
+    @classmethod
+    def find(cls, what: str, folder: Path | None = None) -> Machine | None:
+        return next((m for m in cls.all(folder) if m.matches(what)), None)
 
     @classmethod
     def all(cls, folder: Path | None = None) -> list[Machine]:
@@ -147,6 +161,22 @@ def provider(name: str) -> Provider:
 
 
 PROVIDERS = ["nebius", "evroc", "lambda"]
+
+# Where to delete a VM by hand: one blackhole did not create, or one it was told to forget.
+CONSOLES = {
+    "nebius": "https://console.nebius.com (Compute > Virtual machines)",
+    "evroc": "https://cloud.evroc.com",
+    "lambda": "https://cloud.lambda.ai/instances",
+}
+
+
+def still_billing(provider_name: str = "") -> list[str]:
+    """What to tell someone whose VM blackhole will not (or cannot) delete."""
+    if provider_name in CONSOLES:
+        return [f"the VM itself is still running and billing: delete it in the {provider_name.capitalize()} console, "
+                f"{CONSOLES[provider_name]}"]
+    return ["if it is a cloud VM it is still running and billing: delete it in your provider's console",
+            *(f"  {n}: {u}" for n, u in CONSOLES.items())]
 
 
 # ---------------------------------------------------------------- SSH
@@ -312,9 +342,15 @@ def up(provider_name: str, gpu: str, *, yes: bool = False, spot: bool = False, d
     return m
 
 
+def own_name(host: str) -> str:
+    return "".join(c if c.isalnum() else "-" for c in host.lower()).strip("-")
+
+
 def bring_own(host: str, *, port: int | None = None, install_args: list[str] | None = None, say: Callable = print,
-              do_install: Callable = install, restore: Callable = restore_cache) -> None:
-    """Any Ubuntu machine with an NVIDIA driver: a RunPod or Vast box, a lab server, a desktop."""
+              do_install: Callable = install, restore: Callable = restore_cache, provider_name: str = "",
+              folder: Path | None = None) -> Machine:
+    """Any Ubuntu machine with an NVIDIA driver: a RunPod or Vast box, a lab server, a desktop. It is
+    recorded (managed false) so `machines` lists it and `down` can forget it, never delete it."""
     identity = None
     key = os.environ.get("BLACKHOLE_SSH_KEY")
     if key:
@@ -326,17 +362,54 @@ def bring_own(host: str, *, port: int | None = None, install_args: list[str] | N
             restore(host, identity, say)
         except Exception as e:
             say(f"no compile cache restored ({e})")
+    login, _, address = host.rpartition("@")
+    m = Machine.find(host, folder) or Machine(own_name(host), provider_name, "", "", "", login or "root",
+                                              address=address, managed=False)
+    m.state, m.provider, m.port = "running", provider_name or m.provider, port
+    m.save(folder)
     say(f"ready. Open the TUI with:  ssh -t {host} blackhole")
+    return m
 
 
 # Shown before a delete: what would be lost. Jobs keep their final model in jobs/<job>/out.
 OUTPUTS = 'ls -d ~/.blackhole/jobs/*/out ~/.reaper/jobs/*/out 2>/dev/null; true'
 
 
+def outputs(m: Machine, run: Callable = subprocess.run) -> list[str]:
+    """Finished models still on the VM. Empty when it has no address or does not answer."""
+    if not m.address:
+        return []
+    try:
+        found = run(ssh_cmd(m.host, port=m.port) + [OUTPUTS], capture_output=True, text=True, timeout=30)
+    except Exception:
+        return []
+    return [line for line in (found.stdout or "").splitlines() if line.strip()]
+
+
+def forget(name: str, *, say: Callable = print, folder: Path | None = None) -> Machine:
+    """Drop the record only. Nothing is asked of the provider, so the VM keeps running if it exists."""
+    m = Machine.find(name, folder)
+    if m is None:
+        raise CloudError(f"no machine {name} (see `blackhole machines`)")
+    m.forget(folder)
+    say(f"forgot {m.name}" + (f" ({m.host})" if m.address else ""))
+    if m.address or not m.managed:
+        for line in still_billing(m.provider):
+            say(f"  {line}")
+    return m
+
+
 def down(name: str, *, keep_disk: bool = False, yes: bool = False, say: Callable = print,
          get_provider: Callable[[str], Provider] = provider, run: Callable = subprocess.run,
          save: Callable = save_cache, folder: Path | None = None) -> None:
-    m = Machine.load(name, folder)
+    m = Machine.find(name, folder) or Machine.load(name, folder)
+    name = m.name
+    if not m.managed:
+        if keep_disk:
+            raise CloudError(f"{name} was not rented by blackhole, so it cannot stop it; stop it where you rented it")
+        say(f"{name} was set up with `blackhole up --host`, not rented by blackhole, so it cannot be deleted from here")
+        forget(name, say=say, folder=folder)
+        return
     p = get_provider(m.provider)
     if keep_disk:
         if not p.can_stop:
@@ -349,8 +422,7 @@ def down(name: str, *, keep_disk: bool = False, yes: bool = False, say: Callable
             "starts it again")
         return
     if m.address and not yes:
-        found = run(ssh_cmd(m.host) + [OUTPUTS], capture_output=True, text=True, timeout=30)
-        outs = [line for line in (found.stdout or "").splitlines() if line.strip()]
+        outs = outputs(m, run)
         if outs:
             say(f"{name} still has models that deleting would lose:")
             for o in outs:
