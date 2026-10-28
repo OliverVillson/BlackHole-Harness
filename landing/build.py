@@ -61,7 +61,7 @@ style, body = rest.split("</style>", 1)
 {head.strip()}
 <meta property="og:title" content="BlackHole-Dev">
 <meta property="og:description" content="Write a recipe, collapse an open model until it fits your machine.">
-<meta property="og:image" content="https://blackholeharness.dev/shots/dev-editor.webp">
+<meta property="og:image" content="https://blackholeharness.dev/shots/dev-hero.webp">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>{style}</style>

@@ -6,7 +6,8 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
 /* Layout: one dark column falling toward the hole. Hero = live terminal render of the
-   black hole + banner; then numbers, best recipes, easy recipes, results, the app, install. Deliberately
+   black hole + banner, then the app itself: a big screenshot, a tour of the editor, install. Then the
+   recipes (easy ones, then the best builds), and the measured results last. Deliberately
    single-theme: the page is the inside of the TUI. */
 :root {
   color-scheme: dark;
@@ -80,15 +81,14 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .status b { color: var(--flare); font-weight: 600; }
 
 /* ── facts strip ───────────────────────────────── */
-.facts { margin-top: 64px; border-block: 1px solid var(--ash); }
-.facts .wrap { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.facts { margin-top: 36px; border-block: 1px solid var(--ash); display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .fact { padding-block: 22px; padding-right: 16px; }
 .fact + .fact { border-left: 1px solid var(--ash); padding-left: 20px; }
 .fact .n { font: 700 30px/1 var(--display); color: var(--photon); font-variant-numeric: tabular-nums; }
 .fact .n small { font-size: 16px; color: var(--ember); margin-left: 2px; }
 .fact .l { font-size: 14px; color: var(--dim); margin-top: 8px; }
 @media (max-width: 760px) {
-  .facts .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fact:nth-child(3) { border-left: 0; padding-left: 0; }
   .fact:nth-child(n+3) { border-top: 1px solid var(--ash); }
 }
@@ -134,8 +134,6 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 }
 
 /* ── terminal / screenshots ────────────────────── */
-.split { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 40px; margin-top: 40px; align-items: start; }
-@media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
 .term { border: 1px solid var(--crimson); background: var(--panel); }
 .term .bar-t { display: flex; justify-content: space-between; border-bottom: 1px solid var(--ash); padding: 8px 14px; font: 400 12px/1 var(--mono); color: var(--dim); }
 .term pre { margin: 0; padding: 18px; overflow-x: auto; font: 400 14px/1.75 var(--mono); color: var(--photon); }
@@ -145,12 +143,6 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .shot { margin: 0; border: 1px solid var(--ash); background: #050100; }
 .shot img { display: block; width: 100%; height: auto; }
 .shot figcaption { font: 400 13px/1.5 var(--mono); color: var(--dim); padding: 10px 14px; border-top: 1px solid var(--ash); }
-.steps { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 18px; }
-.steps li { display: grid; grid-template-columns: 34px minmax(0, 1fr); gap: 12px; }
-.steps li span { font: 700 18px/1.3 var(--display); color: var(--ember); }
-.steps li p { font-size: 15px; }
-.steps b { color: var(--photon); font-weight: 600; }
-.steps code { color: var(--ember); overflow-wrap: anywhere; }
 
 /* ── recipes ───────────────────────────────────── */
 .btn.ghost { background: transparent; color: var(--flare); border: 1px solid var(--crimson); }
@@ -199,13 +191,24 @@ pre.tall { max-height: 520px; overflow: auto; }
 @media (max-width: 560px) { .techs { grid-template-columns: minmax(0, 1fr); } }
 
 /* ── dev app ───────────────────────────────────── */
+.hero-shot { margin-top: 56px; border-color: var(--crimson); box-shadow: 0 30px 120px -20px rgba(255,106,0,.28); }
+.tour { display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); gap: 44px; align-items: center; margin-top: 64px; }
+.tour.flip > .tour-text { order: 2; }
+.tour.flip { grid-template-columns: minmax(0, 1.28fr) minmax(0, .72fr); }
+.tour-text h3 { font-size: 26px; margin-top: 10px; }
+.tour-text p { margin-top: 12px; font-size: 15.5px; }
+.tour-text .num { font: 600 12px/1 var(--mono); letter-spacing: .14em; color: var(--ember); }
+.tour-text code { color: var(--flare); }
+.tour-themes { margin-top: 64px; display: grid; grid-template-columns: minmax(0, .72fr) minmax(0, 1.28fr); gap: 44px; align-items: center; }
+.tour-themes .themes { margin-top: 0; }
+@media (max-width: 900px) {
+  .tour, .tour.flip, .tour-themes { grid-template-columns: minmax(0, 1fr); gap: 22px; margin-top: 52px; }
+  .tour.flip > .tour-text { order: 0; }
+}
 .feats { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
 .feats li { font-size: 15px; padding-left: 18px; position: relative; }
 .feats li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; background: var(--ember); }
 .feats b { color: var(--photon); font-weight: 600; }
-.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; align-items: start; }
-.duo .themes { margin-top: 0; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
-@media (max-width: 760px) { .duo { grid-template-columns: minmax(0, 1fr); } }
 .themes { margin-top: 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .themes figure { margin: 0; border: 1px solid var(--ash); background: #050100; min-width: 0; }
 .themes img { display: block; width: 100%; height: auto; aspect-ratio: 55 / 28; }
@@ -235,11 +238,10 @@ pre.tall { max-height: 520px; overflow: auto; }
   <div class="wrap">
     <a class="brand" href="#top" aria-label="BlackHole-Dev home"><svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="mt" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="7.63"><stop offset="0.49" stop-color="#ffae42"/><stop offset="0.64" stop-color="#ff6a00"/><stop offset="0.81" stop-color="#d7261e"/><stop offset="0.92" stop-color="#9e1b07"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><radialGradient id="mb" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="5.95"><stop offset="0.62" stop-color="#ff6a00"/><stop offset="0.79" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><linearGradient id="md" gradientUnits="userSpaceOnUse" x1="0.47" y1="0" x2="23.53" y2="0"><stop offset="0" stop-color="#9e1b07"/><stop offset=".22" stop-color="#ff6a00"/><stop offset=".42" stop-color="#f5efe6"/><stop offset=".6" stop-color="#ffae42"/><stop offset=".8" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07"/></linearGradient></defs><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="url(#md)"/><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="#000000" fill-opacity=".45"/><path d="M4.37 12A7.63 7.63 0 0 1 19.63 12L15.72 12A3.72 3.72 0 0 0 8.28 12Z" fill="url(#mt)"/><path d="M6.05 12A5.95 5.95 0 0 0 17.95 12L15.72 12A3.72 3.72 0 0 1 8.28 12Z" fill="url(#mb)"/><circle cx="12" cy="12" r="3.72" fill="#000000"/><circle cx="12" cy="12" r="4.06" fill="none" stroke="#f5efe6" stroke-width="0.68"/><path d="M0.47 12A11.53 2.65 0 0 0 23.53 12L17.21 12A5.21 1.2 0 0 1 6.79 12Z" fill="url(#md)"/></svg>BlackHole<b>·</b>Dev</a>
     <nav aria-label="Sections">
-      <a href="#best">best recipes</a>
-      <a href="#easy">easy recipes</a>
-      <a href="#results">results</a>
       <a href="#app">the app</a>
       <a href="#install">install</a>
+      <a href="#easy">recipes</a>
+      <a href="#results">results</a>
       <a class="gh" href="https://github.com/OliverVillson/BlackHole-Harness">github ↗</a>
     </nav>
   </div>
@@ -252,10 +254,10 @@ pre.tall { max-height: 520px; overflow: auto; }
       <div class="hero-grid">
         <div>
           <h1>Write the recipe. <em>Collapse the model.</em></h1>
-          <p class="lede">BlackHole-Dev is a desktop app for shrinking open-weight models until they fit your machine. Open any model as parts, write a short Python recipe, plan it on your laptop, run it on a GPU box, then chat with what you made. One recipe took Qwen3.6-35B-A3B from 65&nbsp;GB to 9.8&nbsp;GB.</p>
+          <p class="lede">BlackHole-Dev is a code editor for shrinking open-weight models until they fit your machine. Open any model as parts, write a short Python recipe with completions and a copilot, plan it on your laptop, run it on a GPU box, then chat with what you made.</p>
           <div class="cta">
             <a class="btn" href="#install">Install it</a>
-            <a class="btn ghost" href="#easy">Copy a recipe</a>
+            <a class="btn ghost" href="#app">Tour the app</a>
           </div>
           <p class="status"><b>open source</b> · Apache-2.0 · macOS on Apple silicon first · built on the BlackHole-Harness pipeline</p>
         </div>
@@ -263,15 +265,233 @@ pre.tall { max-height: 520px; overflow: auto; }
       </div>
     </div>
   </div>
-
-  <div class="facts" aria-label="Headline numbers">
-    <div class="wrap">
-      <div class="fact"><div class="n">65<small>→</small>9.8<small>GB</small></div><div class="l">Qwen3.6-35B-A3B, 6.7× smaller</div></div>
-      <div class="fact"><div class="n">~65<small>%</small></div><div class="l">LiveCodeBench v6 at that size</div></div>
-      <div class="fact"><div class="n">0.070</div><div class="l">KL to the original, lower is closer</div></div>
-      <div class="fact"><div class="n">67.8<small>tok/s</small></div><div class="l">on a 16 GB MacBook Air M5</div></div>
-    </div>
+  <div class="wrap">
+    <figure class="shot hero-shot">
+      <img src="shots/dev-hero.webp" width="1440" height="900" alt="BlackHole-Dev: recipes in folders on the left, a Qwen3-30B-A3B recipe the copilot just wrote waiting as a pending change, the copilot conversation on the right, and the plan panel showing 61.06 GB before and 10.56 GB after, fitting a 16 GB Mac" fetchpriority="high">
+      <figcaption>Asked for a 16 GB Mac build, the copilot wrote this recipe as a pending change. Plan sized it from the headers alone: Qwen3-30B-A3B, 61 GB → 10.6 GB.</figcaption>
+    </figure>
   </div>
+
+  <section id="app">
+    <div class="wrap">
+      <div class="eyebrow">The app</div>
+      <h2>An editor for taking models apart</h2>
+      <p class="lede">BlackHole-Dev opens any model as parts: layers, heads, routers, experts with their REAP scores, neurons, single weights. Recipes edit those parts with named functions, and Plan sizes the result from the model's headers before a GPU is ever rented.</p>
+
+      <div class="tour">
+        <div class="tour-text">
+          <span class="num">01</span>
+          <h3>Recipes in a real editor</h3>
+          <p>Monaco, the editor inside VS Code, taught the recipe language. Function names complete as you type <code>recipe.fn("</code>, then their arguments with signature help and defaults.</p>
+          <ul class="feats">
+            <li><b>Completions, snippets and inline lint</b> for every built-in and every function you write.</li>
+            <li><b>Split tab groups</b>: drag a tab to an edge, drag the divider, <code>⌘⌥J</code> folds them back.</li>
+            <li><b>Command palette</b> <code>⌘⇧P</code>, quick open <code>⌘P</code>, recipe folders in the side bar.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="shots/dev-complete.webp" width="1440" height="900" alt="Two editor groups: on the left, recipe.fn(&quot;reap-prune&quot;, with a dropdown of its arguments and its signature and docs above; on the right, the read-only source of the built-in reap-prune function" loading="lazy">
+          <figcaption>Arguments for <code>reap-prune</code> as you type, its source open in a second group.</figcaption>
+        </figure>
+      </div>
+
+      <div class="tour flip">
+        <div class="tour-text">
+          <span class="num">02</span>
+          <h3>A copilot that edits, you decide</h3>
+          <p>Ask for a recipe in a sentence. The copilot reads the model, writes the file, lints and plans it on its own, and every change lands in your editor as a pending diff you accept or reject.</p>
+          <ul class="feats">
+            <li><b>Claude Code</b> with your own subscription, <b>your own Anthropic key</b>, or a <b>local model</b>.</li>
+            <li>Starting a VM, launching a run or a big download <b>always waits for your click</b>.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="shots/dev-copilot.webp" width="1440" height="900" alt="The copilot panel: the request to make Qwen3-30B-A3B fit a 16 GB Mac, then the copilot opening the model and reading its layout, next to the new recipe waiting as a pending change" loading="lazy">
+          <figcaption>One sentence in, the copilot opens the model before it writes a line.</figcaption>
+        </figure>
+      </div>
+
+      <div class="tour">
+        <div class="tour-text">
+          <span class="num">03</span>
+          <h3>Look inside before you cut</h3>
+          <p>The anatomy view walks the model down to single experts and their REAP rank. The analysis panel draws what each recipe step will touch, from the headers or one calibration pass.</p>
+          <ul class="feats">
+            <li><b>Analysis</b>: REAP heatmaps, router usage, weight stats, quantization error by format, two models side by side.</li>
+            <li><b>Plan</b>: size, fit, KV cache and GPU time for your device, before anything runs.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="shots/dev-analysis.webp" width="1440" height="900" alt="The analysis panel: a heatmap of REAP saliency, 24 layers by 32 experts" loading="lazy">
+          <figcaption>REAP saliency per layer and expert, here on a small test MoE.</figcaption>
+        </figure>
+      </div>
+
+      <div class="tour flip">
+        <div class="tour-text">
+          <span class="num">04</span>
+          <h3>Run it on a GPU box, chat with it at home</h3>
+          <p>Run on VM bundles the recipe and your functions, checks the machine over SSH, shows the exact command, and starts it in tmux. The job monitor follows each stage live.</p>
+          <ul class="feats">
+            <li><b>Your own SSH hosts</b> or VMs started with <code>blackhole up</code>, stopped or deleted from the app.</li>
+            <li><b>Chat locally</b> with the result through any OpenAI-compatible server, such as <code>mlx_lm.server</code>.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="shots/dev-runvm.webp" width="1440" height="900" alt="The Run on VM dialog: green checks for lint, pinned functions, the dry-run plan, SSH, the pipeline, GPU and disk on a B300 machine, and the first of the commands it will run" loading="lazy">
+          <figcaption>Every check and every command, before anything starts on the machine.</figcaption>
+        </figure>
+      </div>
+
+      <div class="tour-themes">
+        <div class="tour-text">
+          <span class="num">05</span>
+          <h3>36 themes</h3>
+          <p>From Singularity, the black and ember default, to Lab Paper. Every panel and the editor repaint together.</p>
+        </div>
+        <div class="themes">
+          <figure><img src="shots/theme-singularity.webp" width="550" height="280" alt="Singularity theme" loading="lazy"><figcaption>Singularity</figcaption></figure>
+          <figure><img src="shots/theme-lab-paper.webp" width="550" height="280" alt="Lab Paper theme" loading="lazy"><figcaption>Lab Paper</figcaption></figure>
+          <figure><img src="shots/theme-blueprint.webp" width="550" height="280" alt="Blueprint theme" loading="lazy"><figcaption>Blueprint</figcaption></figure>
+          <figure><img src="shots/theme-pulsar.webp" width="550" height="280" alt="Pulsar theme" loading="lazy"><figcaption>Pulsar</figcaption></figure>
+          <figure><img src="shots/theme-dune.webp" width="550" height="280" alt="Dune theme" loading="lazy"><figcaption>Dune</figcaption></figure>
+          <figure><img src="shots/theme-dracula.webp" width="550" height="280" alt="Dracula theme" loading="lazy"><figcaption>Dracula</figcaption></figure>
+          <figure><img src="shots/theme-canopy.webp" width="550" height="280" alt="Canopy theme" loading="lazy"><figcaption>Canopy</figcaption></figure>
+          <figure><img src="shots/theme-broadsheet.webp" width="550" height="280" alt="Broadsheet theme" loading="lazy"><figcaption>Broadsheet</figcaption></figure>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <div class="wrap">
+      <div class="eyebrow">Install</div>
+      <h2>The app on your Mac, the pipeline on a GPU box</h2>
+      <p class="lede">You need Node 22 or newer, Python 3.11 or newer, git and the Xcode command line tools. Each block is safe to paste as a whole.</p>
+      <div class="installs">
+        <div class="step-i"><span>1</span><div class="term code">
+          <div class="bar-t"><span>Mac · get the code</span><button class="copy" type="button" data-copy="i-clone">copy</button></div>
+<pre id="i-clone">mkdir -p ~/src
+cd ~/src
+git clone https://github.com/OliverVillson/Blackhole-Dev.git
+git clone https://github.com/OliverVillson/BlackHole-Harness.git</pre></div></div>
+        <div class="step-i"><span>2</span><div class="term code">
+          <div class="bar-t"><span>Mac · Python helper</span><button class="copy" type="button" data-copy="i-venv">copy</button></div>
+<pre id="i-venv">python3 -m venv ~/bhdev-venv
+source ~/bhdev-venv/bin/activate
+pip install -e ~/src/BlackHole-Harness
+pip install -e ~/src/BlackHole-Harness/harness
+pip install -e ~/src/Blackhole-Dev
+pip install jedi</pre></div></div>
+        <div class="step-i"><span>3</span><div class="term code">
+          <div class="bar-t"><span>Mac · run the app</span><button class="copy" type="button" data-copy="i-app">copy</button></div>
+<pre id="i-app">cd ~/src/Blackhole-Dev/app
+npm install
+npm run dev</pre></div></div>
+        <div class="step-i"><span>4</span><div class="term code">
+          <div class="bar-t"><span>GPU box · pipeline, runtime, vLLM</span><button class="copy" type="button" data-copy="i-vm">copy</button></div>
+<pre id="i-vm">curl -fsSL https://blackholeharness.dev/install.sh | bash</pre></div></div>
+      </div>
+      <p class="note">In the app's Settings, point the Python helper at <code>~/bhdev-venv/bin/python</code>. If anything is missing, <code>npm run doctor</code> in the app folder says what. The GPU line installs everything on any Ubuntu box with an NVIDIA driver and updates it when run again; press Run on VM in the app, or run a recipe bundle there with <code>python -m blackhole_pipeline --job ~/jobs/q --recipe my.bhr</code>. The Blackhole-Dev repository opens to the public soon.</p>
+    </div>
+  </section>
+
+  <section id="easy">
+    <div class="wrap">
+      <div class="eyebrow">Example recipes</div>
+      <h2>Start with five lines</h2>
+      <p class="lede">Copy one into the app, pick a model, press Plan to see the size before anything runs. The first four run anywhere the weights are; the last one is for a GPU box.</p>
+      <div class="easy">
+        <div class="term code">
+          <div class="bar-t"><span>int4.py · plain n-bit quant</span><span class="acts"><a href="recipes/int4.py" download>download</a><button class="copy" type="button" data-copy="r-int4">copy</button></span></div>
+<pre class="py" id="r-int4"><!--recipe:int4.py--><span class="c"># Every layer to 4 bits.</span>
+<span class="c"># int3, int8, fp8, mlx4, nvfp4, hex3 and hex4 work here too.</span>
+
+<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
+
+recipe = <span class="f">Recipe</span>(<span class="s">"me/int4"</span>, <span class="s">"1.0.0"</span>, title=<span class="s">"Everything to 4 bits"</span>)
+
+recipe.<span class="f">fn</span>(<span class="s">"quant"</span>, select=<span class="s">"layers[*]"</span>, format=<span class="s">"int4"</span>)<!--/recipe--></pre>
+        </div>
+        <div class="term code">
+          <div class="bar-t"><span>reap_prune.py · drop unused experts</span><span class="acts"><a href="recipes/reap_prune.py" download>download</a><button class="copy" type="button" data-copy="r-reap">copy</button></span></div>
+<pre class="py" id="r-reap"><!--recipe:reap_prune.py--><span class="c"># REAP: score every expert on your own text,</span>
+<span class="c"># then drop the quarter you never use.</span>
+
+<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe, gate
+
+recipe = <span class="f">Recipe</span>(<span class="s">"me/reap-25"</span>, <span class="s">"1.0.0"</span>,
+                title=<span class="s">"Drop the experts I never use"</span>,
+                targets={<span class="s">"architectures"</span>: [<span class="s">"moe"</span>]})
+
+calib = recipe.<span class="f">input</span>(<span class="s">"calib"</span>, <span class="s">"path"</span>, default=<span class="s">"my-prompts.txt"</span>,
+                     help=<span class="s">"Text like what you will ask it"</span>)
+
+recipe.<span class="f">fn</span>(<span class="s">"reap-score"</span>, calib=calib)
+recipe.<span class="f">fn</span>(<span class="s">"reap-prune"</span>, ratio=<span class="n">0.25</span>,
+          gates=[<span class="f">gate</span>(<span class="s">"reap-prune.experts_dropped"</span>, <span class="s">"&gt;"</span>, <span class="n">0</span>)])<!--/recipe--></pre>
+        </div>
+        <div class="term code">
+          <div class="bar-t"><span>mixed_precision.py · your own step</span><span class="acts"><a href="recipes/mixed_precision.py" download>download</a><button class="copy" type="button" data-copy="r-mixed">copy</button></span></div>
+<pre class="py" id="r-mixed"><!--recipe:mixed_precision.py--><span class="c"># Your own step: a function defined right in the recipe</span>
+<span class="c"># file, shipped inside the bundle with it.</span>
+
+<span class="k">from</span> blackhole_dev <span class="k">import</span> function
+<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
+
+recipe = <span class="f">Recipe</span>(<span class="s">"me/mixed"</span>, <span class="s">"1.0.0"</span>,
+                title=<span class="s">"8-bit attention, 4-bit experts"</span>)
+
+
+@<span class="f">function</span>(<span class="s">"mixed-precision"</span>, per=<span class="s">"model"</span>)
+<span class="k">def</span> <span class="f">mixed</span>(m, attn: str = <span class="s">"int8"</span>, experts: str = <span class="s">"int4"</span>):
+    m[<span class="s">"layers[*].attn"</span>].<span class="f">quant</span>(attn)
+    m[<span class="s">"experts"</span>].<span class="f">quant</span>(experts)
+    <span class="k">return</span> {<span class="s">"experts"</span>: <span class="f">len</span>(m[<span class="s">"experts"</span>])}
+
+
+recipe.<span class="f">fn</span>(<span class="s">"mixed-precision"</span>, attn=<span class="s">"int8"</span>, experts=<span class="s">"int4"</span>)<!--/recipe--></pre>
+        </div>
+        <div class="term code">
+          <div class="bar-t"><span>reap_hex.py · REAP + HEX</span><span class="acts"><a href="recipes/reap_hex.py" download>download</a><button class="copy" type="button" data-copy="r-hex">copy</button></span></div>
+<pre class="py" id="r-hex"><!--recipe:reap_hex.py--><span class="c"># REAP, then REAQ gives each expert 8 or 16 levels and</span>
+<span class="c"># HEX quantizes them onto learned tables. Packed HEX out.</span>
+
+<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe, gate
+
+recipe = <span class="f">Recipe</span>(<span class="s">"me/reap-hex"</span>, <span class="s">"1.0.0"</span>,
+                title=<span class="s">"REAP, then HEX codebooks"</span>,
+                targets={<span class="s">"architectures"</span>: [<span class="s">"moe"</span>]})
+
+calib = recipe.<span class="f">input</span>(<span class="s">"calib"</span>, <span class="s">"path"</span>, default=<span class="s">"my-prompts.txt"</span>)
+
+recipe.<span class="f">fn</span>(<span class="s">"reap-score"</span>, calib=calib)
+recipe.<span class="f">fn</span>(<span class="s">"reap-prune"</span>, ratio=<span class="n">0.25</span>)
+recipe.<span class="f">edit</span>([{<span class="s">"fn"</span>: <span class="s">"reaq"</span>, <span class="s">"avg_bits"</span>: <span class="n">3.5</span>},
+             {<span class="s">"fn"</span>: <span class="s">"hex-quantize"</span>, <span class="s">"calib"</span>: calib}],
+            gates=[<span class="f">gate</span>(<span class="s">"hex-quantize.rel_mse"</span>, <span class="s">"&lt;="</span>, <span class="n">0.2</span>)],
+            pack=<span class="s">"hex"</span>)<!--/recipe--></pre>
+        </div>
+        <div class="term code wide">
+          <div class="bar-t"><span>moe_int4_gpu.py · the MoE default on a GPU</span><span class="acts"><a href="recipes/moe_int4_gpu.py" download>download</a><button class="copy" type="button" data-copy="r-gpu">copy</button></span></div>
+<pre class="py" id="r-gpu"><!--recipe:moe_int4_gpu.py--><span class="c"># The MoE default on a GPU box: REAP 25% + GPTQ int4,</span>
+<span class="c"># benchmarked against the original and packaged.</span>
+
+<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
+
+recipe = <span class="f">Recipe</span>(<span class="s">"me/moe-int4"</span>, <span class="s">"1.0.0"</span>,
+                title=<span class="s">"REAP 25% + GPTQ int4"</span>)
+
+recipe.<span class="f">fn</span>(<span class="s">"calibrate"</span>, calib=<span class="s">"code"</span>)
+recipe.<span class="f">fn</span>(<span class="s">"reap-gpu"</span>, ratio=<span class="n">0.25</span>)
+recipe.<span class="f">fn</span>(<span class="s">"gptq"</span>)
+recipe.<span class="f">fn</span>(<span class="s">"bench"</span>)
+recipe.<span class="f">fn</span>(<span class="s">"package"</span>)<!--/recipe--></pre>
+        </div>
+      </div>
+      <p class="note">Or describe it: the copilot writes the recipe from a sentence, using your own Anthropic key or Claude Code, and shows its edits as a diff you accept. Starting a VM or a run always needs your click.</p>
+    </div>
+  </section>
 
   <section id="best">
     <div class="wrap">
@@ -523,109 +743,6 @@ recipe.<span class="f">fn</span>(<span class="s">"reapq-hex"</span>, <span class
         </div>
       </div>
 
-      <div class="techs">
-        <article class="tech"><div class="ab">REAP</div><p>Scores each expert by router weight × activation on your own text and drops the ones you don't use.</p></article>
-        <article class="tech"><div class="ab">REAQ <span>original</span></div><p>The same score sets each expert's bit width at a fixed average size. MoE only, never 2-bit.</p></article>
-        <article class="tech"><div class="ab">HEX <span>original</span></div><p>Per-expert learned 8 or 16 level tables with fp8 block scales. 35% less error than GPTQ int3 at the same size.</p></article>
-        <article class="tech"><div class="ab">qheal <span>original</span></div><p>Trains attention, routers and shared experts around the frozen low-bit experts, and backs out if KL gets worse.</p></article>
-      </div>
-    </div>
-  </section>
-
-  <section id="easy">
-    <div class="wrap">
-      <div class="eyebrow">Easy recipes</div>
-      <h2>Start with five lines</h2>
-      <p class="lede">Copy one into the app, pick a model, press Plan to see the size before anything runs. The first four run anywhere the weights are; the last one is for a GPU box.</p>
-      <div class="easy">
-        <div class="term code">
-          <div class="bar-t"><span>int4.py · plain n-bit quant</span><span class="acts"><a href="recipes/int4.py" download>download</a><button class="copy" type="button" data-copy="r-int4">copy</button></span></div>
-<pre class="py" id="r-int4"><!--recipe:int4.py--><span class="c"># Every layer to 4 bits.</span>
-<span class="c"># int3, int8, fp8, mlx4, nvfp4, hex3 and hex4 work here too.</span>
-
-<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
-
-recipe = <span class="f">Recipe</span>(<span class="s">"me/int4"</span>, <span class="s">"1.0.0"</span>, title=<span class="s">"Everything to 4 bits"</span>)
-
-recipe.<span class="f">fn</span>(<span class="s">"quant"</span>, select=<span class="s">"layers[*]"</span>, format=<span class="s">"int4"</span>)<!--/recipe--></pre>
-        </div>
-        <div class="term code">
-          <div class="bar-t"><span>reap_prune.py · drop unused experts</span><span class="acts"><a href="recipes/reap_prune.py" download>download</a><button class="copy" type="button" data-copy="r-reap">copy</button></span></div>
-<pre class="py" id="r-reap"><!--recipe:reap_prune.py--><span class="c"># REAP: score every expert on your own text,</span>
-<span class="c"># then drop the quarter you never use.</span>
-
-<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe, gate
-
-recipe = <span class="f">Recipe</span>(<span class="s">"me/reap-25"</span>, <span class="s">"1.0.0"</span>,
-                title=<span class="s">"Drop the experts I never use"</span>,
-                targets={<span class="s">"architectures"</span>: [<span class="s">"moe"</span>]})
-
-calib = recipe.<span class="f">input</span>(<span class="s">"calib"</span>, <span class="s">"path"</span>, default=<span class="s">"my-prompts.txt"</span>,
-                     help=<span class="s">"Text like what you will ask it"</span>)
-
-recipe.<span class="f">fn</span>(<span class="s">"reap-score"</span>, calib=calib)
-recipe.<span class="f">fn</span>(<span class="s">"reap-prune"</span>, ratio=<span class="n">0.25</span>,
-          gates=[<span class="f">gate</span>(<span class="s">"reap-prune.experts_dropped"</span>, <span class="s">"&gt;"</span>, <span class="n">0</span>)])<!--/recipe--></pre>
-        </div>
-        <div class="term code">
-          <div class="bar-t"><span>mixed_precision.py · your own step</span><span class="acts"><a href="recipes/mixed_precision.py" download>download</a><button class="copy" type="button" data-copy="r-mixed">copy</button></span></div>
-<pre class="py" id="r-mixed"><!--recipe:mixed_precision.py--><span class="c"># Your own step: a function defined right in the recipe</span>
-<span class="c"># file, shipped inside the bundle with it.</span>
-
-<span class="k">from</span> blackhole_dev <span class="k">import</span> function
-<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
-
-recipe = <span class="f">Recipe</span>(<span class="s">"me/mixed"</span>, <span class="s">"1.0.0"</span>,
-                title=<span class="s">"8-bit attention, 4-bit experts"</span>)
-
-
-@<span class="f">function</span>(<span class="s">"mixed-precision"</span>, per=<span class="s">"model"</span>)
-<span class="k">def</span> <span class="f">mixed</span>(m, attn: str = <span class="s">"int8"</span>, experts: str = <span class="s">"int4"</span>):
-    m[<span class="s">"layers[*].attn"</span>].<span class="f">quant</span>(attn)
-    m[<span class="s">"experts"</span>].<span class="f">quant</span>(experts)
-    <span class="k">return</span> {<span class="s">"experts"</span>: <span class="f">len</span>(m[<span class="s">"experts"</span>])}
-
-
-recipe.<span class="f">fn</span>(<span class="s">"mixed-precision"</span>, attn=<span class="s">"int8"</span>, experts=<span class="s">"int4"</span>)<!--/recipe--></pre>
-        </div>
-        <div class="term code">
-          <div class="bar-t"><span>reap_hex.py · REAP + HEX</span><span class="acts"><a href="recipes/reap_hex.py" download>download</a><button class="copy" type="button" data-copy="r-hex">copy</button></span></div>
-<pre class="py" id="r-hex"><!--recipe:reap_hex.py--><span class="c"># REAP, then REAQ gives each expert 8 or 16 levels and</span>
-<span class="c"># HEX quantizes them onto learned tables. Packed HEX out.</span>
-
-<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe, gate
-
-recipe = <span class="f">Recipe</span>(<span class="s">"me/reap-hex"</span>, <span class="s">"1.0.0"</span>,
-                title=<span class="s">"REAP, then HEX codebooks"</span>,
-                targets={<span class="s">"architectures"</span>: [<span class="s">"moe"</span>]})
-
-calib = recipe.<span class="f">input</span>(<span class="s">"calib"</span>, <span class="s">"path"</span>, default=<span class="s">"my-prompts.txt"</span>)
-
-recipe.<span class="f">fn</span>(<span class="s">"reap-score"</span>, calib=calib)
-recipe.<span class="f">fn</span>(<span class="s">"reap-prune"</span>, ratio=<span class="n">0.25</span>)
-recipe.<span class="f">edit</span>([{<span class="s">"fn"</span>: <span class="s">"reaq"</span>, <span class="s">"avg_bits"</span>: <span class="n">3.5</span>},
-             {<span class="s">"fn"</span>: <span class="s">"hex-quantize"</span>, <span class="s">"calib"</span>: calib}],
-            gates=[<span class="f">gate</span>(<span class="s">"hex-quantize.rel_mse"</span>, <span class="s">"&lt;="</span>, <span class="n">0.2</span>)],
-            pack=<span class="s">"hex"</span>)<!--/recipe--></pre>
-        </div>
-        <div class="term code wide">
-          <div class="bar-t"><span>moe_int4_gpu.py · the MoE default on a GPU</span><span class="acts"><a href="recipes/moe_int4_gpu.py" download>download</a><button class="copy" type="button" data-copy="r-gpu">copy</button></span></div>
-<pre class="py" id="r-gpu"><!--recipe:moe_int4_gpu.py--><span class="c"># The MoE default on a GPU box: REAP 25% + GPTQ int4,</span>
-<span class="c"># benchmarked against the original and packaged.</span>
-
-<span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
-
-recipe = <span class="f">Recipe</span>(<span class="s">"me/moe-int4"</span>, <span class="s">"1.0.0"</span>,
-                title=<span class="s">"REAP 25% + GPTQ int4"</span>)
-
-recipe.<span class="f">fn</span>(<span class="s">"calibrate"</span>, calib=<span class="s">"code"</span>)
-recipe.<span class="f">fn</span>(<span class="s">"reap-gpu"</span>, ratio=<span class="n">0.25</span>)
-recipe.<span class="f">fn</span>(<span class="s">"gptq"</span>)
-recipe.<span class="f">fn</span>(<span class="s">"bench"</span>)
-recipe.<span class="f">fn</span>(<span class="s">"package"</span>)<!--/recipe--></pre>
-        </div>
-      </div>
-      <p class="note">Or describe it: the copilot writes the recipe from a sentence, using your own Anthropic key or Claude Code, and shows its edits as a diff you accept. Starting a VM or a run always needs your click.</p>
     </div>
   </section>
 
@@ -633,6 +750,12 @@ recipe.<span class="f">fn</span>(<span class="s">"package"</span>)<!--/recipe-->
     <div class="wrap">
       <div class="eyebrow">Measured, not promised</div>
       <h2>What the recipes did</h2>
+      <div class="facts" aria-label="Headline numbers">
+        <div class="fact"><div class="n">65<small>→</small>9.8<small>GB</small></div><div class="l">Qwen3.6-35B-A3B, 6.7× smaller</div></div>
+        <div class="fact"><div class="n">~65<small>%</small></div><div class="l">LiveCodeBench v6 at that size</div></div>
+        <div class="fact"><div class="n">0.070</div><div class="l">KL to the original, lower is closer</div></div>
+        <div class="fact"><div class="n">67.8<small>tok/s</small></div><div class="l">on a 16 GB MacBook Air M5</div></div>
+      </div>
       <div class="chart">
         <div class="model">
           <h3>Qwen3.6-35B-A3B <span>256 experts → 176 per layer · LiveCodeBench v6</span></h3>
@@ -659,78 +782,13 @@ recipe.<span class="f">fn</span>(<span class="s">"package"</span>)<!--/recipe-->
         <div class="lesson"><span class="tag loss">dropped</span><p>Trimming the output vocabulary (KL 0.070 → 0.389), dropping whole layers, MoEfy-then-prune, round-to-nearest and healing without training all lost.</p></div>
         <div class="lesson"><span class="tag win">kept</span><p>Distillation could not teach shorter thinking, so the server caps it: a 16k thinking budget keeps 60% on LiveCodeBench, with answers in four minutes at most.</p></div>
       </div>
+      <div class="techs">
+        <article class="tech"><div class="ab">REAP</div><p>Scores each expert by router weight × activation on your own text and drops the ones you don't use.</p></article>
+        <article class="tech"><div class="ab">REAQ <span>original</span></div><p>The same score sets each expert's bit width at a fixed average size. MoE only, never 2-bit.</p></article>
+        <article class="tech"><div class="ab">HEX <span>original</span></div><p>Per-expert learned 8 or 16 level tables with fp8 block scales. 35% less error than GPTQ int3 at the same size.</p></article>
+        <article class="tech"><div class="ab">qheal <span>original</span></div><p>Trains attention, routers and shared experts around the frozen low-bit experts, and backs out if KL gets worse.</p></article>
+      </div>
       <p class="note">Every chart, with setups and dates: <a href="https://claude.ai/artifact/EPTz8xAKPoPPnQnHHiaYYt">the full results page ↗</a></p>
-    </div>
-  </section>
-
-  <section id="app">
-    <div class="wrap">
-      <div class="eyebrow">The app</div>
-      <h2>An editor for taking models apart</h2>
-      <div class="split">
-        <div>
-          <p class="lede" style="margin-top:0">BlackHole-Dev opens any model as parts: layers, heads, routers, experts with their REAP scores, neurons, single weights. Recipes edit those parts with named functions, and Plan sizes the result from the model's headers before a GPU is ever rented.</p>
-          <ul class="feats">
-            <li><b>Monaco editor</b> with recipe autocomplete, signature help, snippets, inline lint and split tab groups.</li>
-            <li><b>Copilot</b> that reads, plans and edits recipes with your own Anthropic key or through Claude Code.</li>
-            <li><b>Plan</b>: size, fit, KV cache and GPU time for your device, from headers only.</li>
-            <li><b>Analysis panel</b>: REAP heatmaps, router usage, weight stats, quantization error by format, two models side by side.</li>
-            <li><b>Run on VM</b> over SSH with a live job monitor, then <b>chat locally</b> with the result through any OpenAI-compatible server.</li>
-            <li><b>36 themes</b>, from Singularity to Lab Paper.</li>
-          </ul>
-        </div>
-        <figure class="shot">
-          <img src="shots/dev-editor.webp" width="1100" height="900" alt="BlackHole-Dev: a Python recipe in the editor with a pending copilot change adding a qheal step, and the plan panel showing 128 to 96 experts per layer, HEX at 3.25 bits per weight and 9.8 GB, which fits a 16 GB Mac" loading="lazy">
-          <figcaption>A recipe, a copilot edit waiting for review, and the plan for a 16 GB Mac.</figcaption>
-        </figure>
-      </div>
-      <div class="duo">
-        <figure class="shot">
-          <img src="shots/dev-analysis.webp" width="1440" height="900" alt="The analysis panel showing a heatmap of REAP saliency per expert and layer" loading="lazy">
-          <figcaption>REAP scores per expert and layer in the analysis panel.</figcaption>
-        </figure>
-        <div class="themes">
-          <figure><img src="shots/theme-singularity.webp" width="550" height="280" alt="Singularity theme" loading="lazy"><figcaption>Singularity</figcaption></figure>
-          <figure><img src="shots/theme-lab-paper.webp" width="550" height="280" alt="Lab Paper theme" loading="lazy"><figcaption>Lab Paper</figcaption></figure>
-          <figure><img src="shots/theme-blueprint.webp" width="550" height="280" alt="Blueprint theme" loading="lazy"><figcaption>Blueprint</figcaption></figure>
-          <figure><img src="shots/theme-pulsar.webp" width="550" height="280" alt="Pulsar theme" loading="lazy"><figcaption>Pulsar</figcaption></figure>
-          <figure><img src="shots/theme-dune.webp" width="550" height="280" alt="Dune theme" loading="lazy"><figcaption>Dune</figcaption></figure>
-          <figure><img src="shots/theme-dracula.webp" width="550" height="280" alt="Dracula theme" loading="lazy"><figcaption>Dracula</figcaption></figure>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section id="install">
-    <div class="wrap">
-      <div class="eyebrow">Install</div>
-      <h2>The app on your Mac, the pipeline on a GPU box</h2>
-      <p class="lede">You need Node 22 or newer, Python 3.11 or newer, git and the Xcode command line tools. Each block is safe to paste as a whole.</p>
-      <div class="installs">
-        <div class="step-i"><span>1</span><div class="term code">
-          <div class="bar-t"><span>Mac · get the code</span><button class="copy" type="button" data-copy="i-clone">copy</button></div>
-<pre id="i-clone">mkdir -p ~/src
-cd ~/src
-git clone https://github.com/OliverVillson/Blackhole-Dev.git
-git clone https://github.com/OliverVillson/BlackHole-Harness.git</pre></div></div>
-        <div class="step-i"><span>2</span><div class="term code">
-          <div class="bar-t"><span>Mac · Python helper</span><button class="copy" type="button" data-copy="i-venv">copy</button></div>
-<pre id="i-venv">python3 -m venv ~/bhdev-venv
-source ~/bhdev-venv/bin/activate
-pip install -e ~/src/BlackHole-Harness
-pip install -e ~/src/BlackHole-Harness/harness
-pip install -e ~/src/Blackhole-Dev
-pip install jedi</pre></div></div>
-        <div class="step-i"><span>3</span><div class="term code">
-          <div class="bar-t"><span>Mac · run the app</span><button class="copy" type="button" data-copy="i-app">copy</button></div>
-<pre id="i-app">cd ~/src/Blackhole-Dev/app
-npm install
-npm run dev</pre></div></div>
-        <div class="step-i"><span>4</span><div class="term code">
-          <div class="bar-t"><span>GPU box · pipeline, runtime, vLLM</span><button class="copy" type="button" data-copy="i-vm">copy</button></div>
-<pre id="i-vm">curl -fsSL https://blackholeharness.dev/install.sh | bash</pre></div></div>
-      </div>
-      <p class="note">In the app's Settings, point the Python helper at <code>~/bhdev-venv/bin/python</code>. If anything is missing, <code>npm run doctor</code> in the app folder says what. The GPU line installs everything on any Ubuntu box with an NVIDIA driver and updates it when run again; press Run on VM in the app, or run a recipe bundle there with <code>python -m blackhole_pipeline --job ~/jobs/q --recipe my.bhr</code>. The Blackhole-Dev repository opens to the public soon.</p>
     </div>
   </section>
 
