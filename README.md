@@ -76,7 +76,9 @@ or updates `~/BlackHole-Harness` (`--ref BRANCH` for another branch), picks the 
 driver can run, installs the CLI, REAPer, the pipeline, the TUI and the runtime editable into
 `~/.blackhole/venv`, puts vLLM with REAPer and the `blackhole-hex` plugin in `~/.blackhole/vllm`,
 and checks it all on the GPU. Venvs set up by hand earlier (`~/bh-venv`, `~/vllm-venv`) are
-reused in place. `blackhole up` runs the same script over SSH.
+reused in place. It also installs `blackhole_dev` (what recipes run from the BlackHole-Dev app
+need) from `~/Blackhole-Dev` when that is there (a git checkout, or a copy rsynced from your
+laptop), else by cloning it when the machine can. `blackhole up` runs the same script over SSH.
 
 With `harness/` installed, `blackhole` with no subcommand (or with a model name) opens the TUI;
 `up`, `down`, `ssh`, `machines`, `run`, `validate`, `detect`, `ops`, `describe`, `market` and
