@@ -47,7 +47,7 @@ All three are open source under Apache-2.0.
 | `blackhole/` | the `blackhole-harness` package: schema format, op catalog, runner, stage cache, receipts (`core`), hardware and model detection (`hw`), the open format layer: safetensors IO, HEX layout and quantizer, format table (`anatomy`), schema builder with Claude or GPT (`agent`), marketplace (`market`), GPU VM bring-up (`cloud`) |
 | `schemas/` | example schemas; `schemas/lab/` holds experimental ones |
 | `tests/` | core tests, no GPU or network needed |
-| `install.sh` | one-line installer for a fresh Ubuntu GPU VM |
+| `install.sh` | the one-line VM installer and updater (served at blackholeharness.dev/install.sh; `blackhole/cloud/install.sh` is the copy `blackhole up` sends, kept identical by a test) |
 | `harness/` | the pipeline that runs today: `blackhole_pipeline` (every stage, MLX export with the HEX Metal kernel, LiveCodeBench, `blackhole-serve`) and the Textual TUI `blackhole_tui` |
 | `reaper/` | REAPer (`reaper_pipeline`, `reaper_hw`, `reaper_tui`): REAP calibration, scoring, pruning, eval, the Flint port; `reaper/gpu_perf/` holds GPTQ, REAQ/HEX tables and the B200 benchmarks |
 | `runtime/` | the BlackHole runtime, kept apart from the pipeline: the HEX Triton MoE kernel for NVIDIA GPUs and the `blackhole-hex` vLLM plugin (see `runtime/README.md`) |
@@ -67,9 +67,16 @@ blackhole describe "a Python coder that fits a 16 GB Mac"
 blackhole up --provider nebius --gpu b200         # prices first, rents nothing without --yes
 
 # GPU VM: the real pipeline and TUI
-bash harness/scripts/setup-vm.sh                  # venv, CUDA torch, REAPer, harness, vLLM
+curl -fsSL https://blackholeharness.dev/install.sh | bash
 blackhole                                         # the TUI; reattaches to a running job
 ```
+
+The installer is one command on any Ubuntu GPU box and the same command updates it: it clones
+or updates `~/BlackHole-Harness` (`--ref BRANCH` for another branch), picks the CUDA torch the
+driver can run, installs the CLI, REAPer, the pipeline, the TUI and the runtime editable into
+`~/.blackhole/venv`, puts vLLM with REAPer and the `blackhole-hex` plugin in `~/.blackhole/vllm`,
+and checks it all on the GPU. Venvs set up by hand earlier (`~/bh-venv`, `~/vllm-venv`) are
+reused in place. `blackhole up` runs the same script over SSH.
 
 With `harness/` installed, `blackhole` with no subcommand (or with a model name) opens the TUI;
 `up`, `down`, `ssh`, `machines`, `run`, `validate`, `detect`, `ops`, `describe`, `market` and

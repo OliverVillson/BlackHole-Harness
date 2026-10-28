@@ -180,7 +180,7 @@ SCHEMAS = [
            "on-policy rounds (the student writes in vLLM, the teacher grades); MLX export with HEX experts (REAQ "
            "tiers: top 10% by REAP 16-level tables, rest 8-level), GPTQ attention (q/o 3-bit), an output-only "
            "vocab trim to the 64k tokens the teacher writes (of 248k); finally a heal around the quantized model. "
-           "Needs vLLM (setup-vm.sh installs it in ~/vllm-venv) and flash-linear-attention.",
+           "Needs vLLM (install.sh puts it next to the pipeline) and flash-linear-attention.",
            (Step("reap", "drop 31.25% of routed experts, calibrated on code", {"prune": 0.3125, "calib": "code"}),
             Step("heal", "shortest verified traces + on-policy distillation, layer and router matching",
                  {"heal_calib": "contest", "heal_samples": 3, "heal_prompts": 768, "heal_max_tokens": 16384,
