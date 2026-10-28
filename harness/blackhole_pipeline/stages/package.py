@@ -86,8 +86,8 @@ def run(bh, rj) -> None:
         card += ["", "## Run it on a Mac", "", "```", "pip install mlx-lm",
                  f"mlx_lm.server --model {xd.name} --trust-remote-code    # OpenAI API on :8080 (opencode, pi, ...)",
                  f"mlx_lm.generate --model {xd.name} --trust-remote-code --prompt 'Write a binary search in Python'",
-                 "```", "", "If macOS refuses to fit it in GPU memory, raise the limit: "
-                 "`sudo sysctl iogpu.wired_limit_mb=12288` (16 GB Mac; resets on reboot)."]
+                 "```", "", "On a 16 GB Mac add `--prompt-concurrency 1 --prefill-step-size 512 --prompt-cache-size 2` "
+                 "to the server and close other large apps; no system setting is needed."]
     card.append("")
     for d in (gd, qd, xd):
         if d and d.exists():

@@ -30,6 +30,7 @@ Output-only vocab trim: with `head_vocab` = K the LM head has K rows for the tok
 `lm_head_ids`; logits of every other token are -inf (the model still reads all tokens).
 """
 
+import os
 from dataclasses import dataclass, field
 from typing import Any, Optional
 
@@ -280,14 +281,14 @@ class HexSwitchLinear(nn.Module):
             grid=(32 * HEX_SG * ntg, R, 1), threadgroup=(32 * HEX_SG, 1, 1),
             output_shapes=[(R, self.out_dims)], output_dtypes=[x.dtype])[0]
 
-    def dequant(self, dtype=mx.bfloat16):
-        """All experts as dense [E, out, in] weights (Metal), for prompt processing."""
-        E = self.idx.shape[0]
+    def dequant(self, dtype=mx.bfloat16, lo: int = 0, hi: Optional[int] = None):
+        """Experts lo..hi-1 (default all) as dense [hi - lo, out, in] weights (Metal), for prompt processing."""
+        hi = self.idx.shape[0] if hi is None else hi
         return _hex_kernel("dequant")(
-            inputs=self.parts(), template=[("T", dtype), ("BITS", self.bits), ("IN", self.in_dims),
-                                           ("OUT", self.out_dims)],
-            grid=(self.in_dims // 16, self.out_dims, E), threadgroup=(min(32, self.in_dims // 16), 1, 1),
-            output_shapes=[(E, self.out_dims, self.in_dims)], output_dtypes=[dtype])[0]
+            inputs=[p[lo:hi] for p in self.parts()], template=[("T", dtype), ("BITS", self.bits),
+                                                               ("IN", self.in_dims), ("OUT", self.out_dims)],
+            grid=(self.in_dims // 16, self.out_dims, hi - lo), threadgroup=(min(32, self.in_dims // 16), 1, 1),
+            output_shapes=[(hi - lo, self.out_dims, self.in_dims)], output_dtypes=[dtype])[0]
 
     def __call__(self, x, experts, shared_x: bool = True):
         """x [R or N, in] (shared_x: one row per token for all its k slots), experts [N*k] -> [N*k, out]."""
@@ -307,6 +308,10 @@ class HexSwitchGLU(nn.Module):
     # (token, slot) pairs per expert from which prompt processing dequantizes the tier once and
     # runs sorted dense expert matmuls instead of one matrix-vector product per pair
     dequant_min_per_expert = 8
+    # bf16 weights (gate, up and down together) dequantized at a time during prompt processing: a whole
+    # 160-expert Qwen3.6 layer is ~1 GB, which a 9.8 GB model on a 16 GB Mac has no room for under
+    # macOS's default GPU memory limit; chunks of this size keep the prompt peak near the decode peak
+    dequant_mb = int(os.environ.get("BLACKHOLE_HEX_DEQUANT_MB", "256"))
 
     def __init__(self, hidden: int, inter: int, num_experts: int, bits: int):
         super().__init__()
@@ -314,18 +319,34 @@ class HexSwitchGLU(nn.Module):
         self.up_proj = HexSwitchLinear(hidden, inter, num_experts, bits)
         self.down_proj = HexSwitchLinear(inter, hidden, num_experts, bits)
 
+    def _chunk(self) -> int:
+        """Experts per dequantized chunk."""
+        g, d = self.gate_proj, self.down_proj
+        per_expert = 2 * (2 * g.in_dims * g.out_dims + d.in_dims * d.out_dims)
+        return max(1, min(g.idx.shape[0], (self.dequant_mb << 20) // per_expert))
+
     def _dense(self, xf, ids, k):
-        E = self.gate_proj.idx.shape[0]
+        E, C = self.gate_proj.idx.shape[0], self._chunk()
         live = ids != HEX_SKIP
-        order = mx.argsort(mx.where(live, ids, E - 1))
-        sid = mx.minimum(ids[order], E - 1)
+        order = mx.argsort(mx.where(live, ids, E))                                        # skipped pairs last
+        sid = ids[order]
         xs = xf[order // k][:, None].astype(mx.bfloat16)                                  # [R, 1, H]
-        mm = lambda a, lin: mx.gather_mm(a, lin.dequant().swapaxes(-1, -2), rhs_indices=sid,  # noqa: E731
-                                         sorted_indices=True)
-        a = nn.silu(mm(xs, self.gate_proj)) * mm(xs, self.up_proj)
-        y = mm(a, self.down_proj)[:, 0]
-        y = y[mx.argsort(order)]
-        return mx.where(live[:, None], y, 0).astype(xf.dtype)
+        los = list(range(0, E, C))
+        ends = (sid[None, :] < mx.array([lo + C for lo in los], dtype=mx.uint32)[:, None]).sum(1).tolist()
+        parts, start = [], 0
+        for lo, end in zip(los, ends):
+            if end > start:
+                hi, rows = min(lo + C, E), slice(start, end)
+                mm = lambda a, lin: mx.gather_mm(  # noqa: E731
+                    a, lin.dequant(lo=lo, hi=hi).swapaxes(-1, -2), rhs_indices=sid[rows] - lo, sorted_indices=True)
+                a = nn.silu(mm(xs[rows], self.gate_proj)) * mm(xs[rows], self.up_proj)
+                parts.append(mm(a, self.down_proj)[:, 0])
+                mx.eval(parts[-1])   # this chunk's dense weights are freed before the next is dequantized
+            start = end
+        if start < ids.size:
+            parts.append(mx.zeros((ids.size - start, xf.shape[-1]), dtype=mx.bfloat16))
+        y = mx.concatenate(parts) if len(parts) > 1 else parts[0]
+        return y[mx.argsort(order)].astype(xf.dtype)
 
     def __call__(self, x, indices):
         """x [..., H], indices [..., k] -> [..., k, H] (like SwitchGLU)."""
@@ -453,11 +474,15 @@ class FlintModel(nn.Module):
 def pin_memory() -> None:
     """Let MLX wire (pin) up to the GPU working-set limit, so macOS cannot page the weights out:
     on a 16 GB Mac a 9 GB model otherwise gets partly swapped and a long prompt, which touches
-    every expert, reloads them from disk (measured on an M5: 385 -> 777 tok/s prompt processing)."""
+    every expert, reloads them from disk (measured on an M5: 385 -> 777 tok/s prompt processing).
+    Also caps MLX's cache of freed buffers (BLACKHOLE_MLX_CACHE_MB, default 512): by default it may
+    hold as much as the limit itself, and on a 16 GB Mac those idle buffers are what tip a long
+    prompt over macOS's default GPU limit. Neither needs root or a sysctl."""
     try:
         info = mx.device_info() if hasattr(mx, "device_info") else mx.metal.device_info()
         if mx.metal.is_available() and info.get("max_recommended_working_set_size"):
             mx.set_wired_limit(int(info["max_recommended_working_set_size"]))
+            mx.set_cache_limit(int(os.environ.get("BLACKHOLE_MLX_CACHE_MB", "512")) << 20)
     except Exception:  # noqa: BLE001  (older MLX, or no GPU)
         pass
 

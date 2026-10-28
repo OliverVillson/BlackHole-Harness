@@ -89,9 +89,11 @@ def main():
             errs.append(rel(glu.gate_proj._matvec(x, ids, glu.up_proj), a_ref))
             a = a_ref.astype(mx.bfloat16)
             errs.append(rel(glu.down_proj(a, ids, False), reference(glu.down_proj, a, ids)))
-            yd = glu._dense(x, ids, k)
             yr = reference(glu.down_proj, (nn.silu(g) * u).astype(mx.bfloat16), ids)
-            errs.append(rel(yd, yr))
+            errs.append(rel(glu._dense(x, ids, k), yr))
+            saved, glu.dequant_mb = glu.dequant_mb, 0   # one expert per dequantized chunk: same result
+            errs.append(rel(glu._dense(x, ids, k), yr))
+            glu.dequant_mb = saved
         with mx.stream(mx.cpu):
             wr = F.hex_dequant(*glu.down_proj.parts(), bits)
         errs.append(rel(glu.down_proj.dequant(mx.float32), wr))
