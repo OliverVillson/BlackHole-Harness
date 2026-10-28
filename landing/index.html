@@ -5,18 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>BlackHole-Harness</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Shrink any open-weight model until it runs on your own PC. Auto-detect, REAP pruning, distillation heal and 4-bit quant, driven from a TUI on a rented GPU.">
+<meta name="description" content="Shrink any open-weight model until it runs on your own PC: REAP pruning, distillation and HEX per-expert codebooks. Qwen3.6-35B-A3B at 9.8 GB, 67.8 tok/s on a 16 GB MacBook Air. Open source: pipeline, BlackHole-Dev desktop app, runtime.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
 <meta property="og:title" content="BlackHole-Harness">
 <meta property="og:description" content="Shrink any open-weight model until it runs on your own PC.">
-<meta property="og:image" content="https://blackholeharness.dev/shots/05-running.webp">
+<meta property="og:image" content="https://blackholeharness.dev/shots/dev-editor.webp">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>
 /* Layout: one dark column falling toward the hole. Hero = live terminal render of the
-   black hole + banner; then numbers, pipeline, install, schemas, targets. Deliberately
+   black hole + banner; then numbers, techniques, the three parts, the dev app, recipes, install, targets. Deliberately
    single-theme: the page is the inside of the TUI. */
 :root {
   color-scheme: dark;
@@ -143,15 +143,6 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   .lesson + .lesson { padding-left: 0; border-left: 0; border-top: 1px solid var(--ash); margin-top: 20px; }
 }
 
-/* ── pipeline ──────────────────────────────────── */
-.pipe { margin-top: 40px; list-style: none; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--ash); border: 1px solid var(--ash); counter-reset: s; }
-.pipe li { background: var(--void); padding: 22px 20px 24px; counter-increment: s; }
-.pipe li::before { content: counter(s, decimal-leading-zero) "  " attr(data-k); display: block; font: 600 12px/1 var(--mono); color: var(--ember); letter-spacing: .06em; margin-bottom: 14px; white-space: pre; }
-.pipe h3 { font-size: 19px; }
-.pipe p { margin-top: 8px; font-size: 15px; color: var(--text); }
-@media (max-width: 900px) { .pipe { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 520px) { .pipe { grid-template-columns: minmax(0, 1fr); } }
-
 /* ── terminal / screenshots ────────────────────── */
 .split { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 40px; margin-top: 40px; align-items: start; }
 @media (max-width: 900px) { .split { grid-template-columns: minmax(0, 1fr); } }
@@ -191,6 +182,47 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 .t span i { font-style: normal; color: var(--flare); }
 @media (max-width: 760px) { .targets { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 
+/* ── techniques ────────────────────────────────── */
+.techs { margin-top: 40px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--ash); border: 1px solid var(--ash); }
+.tech { background: var(--void); padding: 22px 20px 24px; display: grid; gap: 10px; align-content: start; min-width: 0; }
+.tech .ab { font: 700 26px/1 var(--display); color: var(--ember); letter-spacing: .02em; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.tech .ab span { font: 600 10.5px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--flare); border: 1px solid var(--ash); padding: 4px 6px; }
+.tech .full { font: 400 12.5px/1.4 var(--mono); color: var(--dim); }
+.tech p { font-size: 15px; }
+.tech .proof { font: 400 12.5px/1.5 var(--mono); color: var(--text); border-left: 2px solid var(--ember); padding-left: 10px; }
+@media (max-width: 900px) { .techs { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .techs { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── three parts ───────────────────────────────── */
+.parts { margin-top: 40px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+.part { border: 1px solid var(--crimson); background: var(--panel); padding: 22px 20px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.part .num { font: 600 12px/1 var(--mono); color: var(--ember); letter-spacing: .1em; text-transform: uppercase; }
+.part h3 { font-size: 23px; }
+.part p { font-size: 15px; }
+.part code { white-space: nowrap; }
+.part ul { margin: 0; padding-left: 18px; font-size: 14.5px; display: grid; gap: 6px; }
+.part ul li::marker { color: var(--ember); }
+.part .repo { margin-top: auto; padding-top: 12px; border-top: 1px solid var(--ash); font: 400 13px/1.4 var(--mono); color: var(--dim); overflow-wrap: anywhere; }
+.part .repo b { color: var(--flare); font-weight: 600; }
+@media (max-width: 900px) { .parts { grid-template-columns: minmax(0, 1fr); } }
+
+/* ── dev app ───────────────────────────────────── */
+.feats { list-style: none; padding: 0; margin: 24px 0 0; display: grid; gap: 14px; }
+.feats li { font-size: 15px; padding-left: 18px; position: relative; }
+.feats li::before { content: ""; position: absolute; left: 0; top: .62em; width: 7px; height: 7px; background: var(--ember); }
+.feats b { color: var(--photon); font-weight: 600; }
+.duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; margin-top: 20px; }
+@media (max-width: 760px) { .duo { grid-template-columns: minmax(0, 1fr); } }
+.themes { margin-top: 20px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+.themes figure { margin: 0; border: 1px solid var(--ash); background: #050100; min-width: 0; }
+.themes img { display: block; width: 100%; height: auto; aspect-ratio: 55 / 28; }
+.themes figcaption { font: 400 12px/1 var(--mono); color: var(--dim); padding: 8px 10px; border-top: 1px solid var(--ash); }
+@media (max-width: 760px) { .themes { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.py .k { color: var(--flare); }
+.py .s { color: var(--text); }
+.py .f { color: var(--ember); }
+.py .c { color: var(--dim); }
+
 /* ── footer ────────────────────────────────────── */
 .end { margin-top: 110px; border-top: 1px solid var(--ash); }
 .end .wrap { padding-block: 36px 48px; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 20px; font: 400 13px/1.6 var(--mono); color: var(--dim); }
@@ -201,6 +233,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   .hero-grid { grid-template-columns: minmax(0, 1fr); }
   .hole { order: -1; }
 }
+.hero .cmd { flex: 1 1 100%; font-size: 14px; justify-content: space-between; }
 @media (max-width: 520px) { .cmd { font-size: 13px; gap: 8px; padding-left: 12px; } }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
 </style>
@@ -211,9 +244,10 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
     <a class="brand" href="#top" aria-label="BlackHole-Harness home"><svg viewBox="0 0 24 24" aria-hidden="true"><defs><radialGradient id="mt" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="7.63"><stop offset="0.49" stop-color="#ffae42"/><stop offset="0.64" stop-color="#ff6a00"/><stop offset="0.81" stop-color="#d7261e"/><stop offset="0.92" stop-color="#9e1b07"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><radialGradient id="mb" gradientUnits="userSpaceOnUse" cx="12" cy="12" r="5.95"><stop offset="0.62" stop-color="#ff6a00"/><stop offset="0.79" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07" stop-opacity="0"/></radialGradient><linearGradient id="md" gradientUnits="userSpaceOnUse" x1="0.47" y1="0" x2="23.53" y2="0"><stop offset="0" stop-color="#9e1b07"/><stop offset=".22" stop-color="#ff6a00"/><stop offset=".42" stop-color="#f5efe6"/><stop offset=".6" stop-color="#ffae42"/><stop offset=".8" stop-color="#d7261e"/><stop offset="1" stop-color="#9e1b07"/></linearGradient></defs><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="url(#md)"/><path d="M0.47 12A11.53 2.65 0 0 1 23.53 12L17.21 12A5.21 1.2 0 0 0 6.79 12Z" fill="#000000" fill-opacity=".45"/><path d="M4.37 12A7.63 7.63 0 0 1 19.63 12L15.72 12A3.72 3.72 0 0 0 8.28 12Z" fill="url(#mt)"/><path d="M6.05 12A5.95 5.95 0 0 0 17.95 12L15.72 12A3.72 3.72 0 0 1 8.28 12Z" fill="url(#mb)"/><circle cx="12" cy="12" r="3.72" fill="#000000"/><circle cx="12" cy="12" r="4.06" fill="none" stroke="#f5efe6" stroke-width="0.68"/><path d="M0.47 12A11.53 2.65 0 0 0 23.53 12L17.21 12A5.21 1.2 0 0 1 6.79 12Z" fill="url(#md)"/></svg>BlackHole<b>·</b>Harness</a>
     <nav aria-label="Sections">
       <a href="#results">results</a>
-      <a href="#how">how it works</a>
+      <a href="#techniques">techniques</a>
+      <a href="#parts">open source</a>
+      <a href="#dev">dev app</a>
       <a href="#install">install</a>
-      <a href="#schemas">schemas</a>
       <a class="gh" href="https://github.com/OliverVillson/BlackHole-Harness">github ↗</a>
     </nav>
   </div>
@@ -226,12 +260,12 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
       <div class="hero-grid">
         <div>
           <h1>Collapse any open model until it fits <em>your&nbsp;machine</em>.</h1>
-          <p class="lede">BlackHole-Harness takes a big open-weight model, works out what it is, and shrinks it: expert or neuron pruning for what you actually use it for, distillation to heal it, then 4-bit weights. You get a GGUF that runs on a 12&nbsp;GB graphics card or a 32&nbsp;GB Mac.</p>
+          <p class="lede">BlackHole-Harness takes a big open-weight model and shrinks it: REAP expert pruning for what you actually use it for, distillation to heal it, then our own per-expert codebook quantization. A 35B coding model now runs at 9.8&nbsp;GB on a 16&nbsp;GB MacBook Air.</p>
           <div class="cta">
-            <div class="cmd"><span class="p">$</span><code id="install-cmd">pipx install blackhole-harness</code><button class="copy" type="button" data-copy="install-cmd" id="copy-hero">copy</button></div>
+            <div class="cmd"><span class="p">$</span><code id="install-cmd">curl -fsSL https://blackholeharness.dev/install.sh | bash</code><button class="copy" type="button" data-copy="install-cmd" id="copy-hero">copy</button></div>
             <a class="btn" href="#results">See the numbers</a>
           </div>
-          <p class="status"><b>early preview</b> · open source, Apache-2.0 · first release lands with the public repo</p>
+          <p class="status"><b>open source</b> · Apache-2.0 · pipeline, desktop app and runtime · run the line above on any Ubuntu GPU box</p>
         </div>
         <div class="hole"><canvas id="hole" role="img" aria-label="A black hole drawn in orange and red pixels, with a tilted accretion disk"></canvas></div>
       </div>
@@ -240,144 +274,253 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 
   <div class="facts" aria-label="Headline numbers">
     <div class="wrap">
-      <div class="fact"><div class="n">57<small>→</small>10.4<small>GB</small></div><div class="l">Qwen3-30B-A3B, measured on a B200</div></div>
-      <div class="fact"><div class="n">0.042</div><div class="l">KL to the original at that size, lower is better</div></div>
-      <div class="fact"><div class="n">1<small>line</small></div><div class="l">to install; one more rents the GPU</div></div>
-      <div class="fact"><div class="n">any<small>model</small></div><div class="l">Hugging Face id or local folder, MoE or dense</div></div>
+      <div class="fact"><div class="n">65<small>→</small>9.8<small>GB</small></div><div class="l">Qwen3.6-35B-A3B, 6.7× smaller</div></div>
+      <div class="fact"><div class="n">~65<small>%</small></div><div class="l">LiveCodeBench v6 at that size</div></div>
+      <div class="fact"><div class="n">0.070</div><div class="l">KL to the original, lower is closer</div></div>
+      <div class="fact"><div class="n">67.8<small>tok/s</small></div><div class="l">on a 16 GB MacBook Air M5</div></div>
     </div>
   </div>
 
   <section id="results">
     <div class="wrap">
       <div class="eyebrow">Measured, not promised</div>
-      <h2>Smaller and closer to the original than the old default</h2>
-      <p class="lede">Every recipe ships with the run that justifies it. These come from B200 runs on 23 October 2026. Quality is KL divergence from the full model on held-out answers it wrote itself; the default recipes have to stay at or under 0.10 to pass.</p>
+      <h2>A 35B coder that fits in a 16&nbsp;GB laptop</h2>
+      <p class="lede">The full REAP/Q-HEX recipe on one B300 in about three and a half hours: 31.25% of the experts pruned on code, shortest verified traces and two on-policy distillation rounds, HEX experts with REAQ tiers, then qheal. The whole model sits in memory on a MacBook Air M5 and generates at 67.8&nbsp;tokens per second.</p>
 
       <div class="chart">
         <div class="model">
-          <h3>Qwen3-30B-A3B <span>mixture of experts · 128 experts, 8 active</span></h3>
+          <h3>Qwen3.6-35B-A3B <span>mixture of experts · 256 experts → 176 per layer</span></h3>
           <div class="rows">
-            <div class="row full"><div class="name"><b>Original</b>bf16, all experts</div><div class="track"><div class="bar" style="--w:100%"></div><span class="gb" style="--w:100%">57 GB</span></div><div class="kl">KL <b>0</b></div></div>
-            <div class="row"><div class="name"><b>Previous default</b>keep 50% experts, int8</div><div class="track"><div class="bar old" style="--w:24%"></div><span class="gb" style="--w:24%">13.7 GB</span></div><div class="kl bad">KL <b>0.158</b></div></div>
-            <div class="row"><div class="name"><b>BlackHole default</b>keep 75% experts, int4</div><div class="track"><div class="bar ours" style="--w:18.2%"></div><span class="gb" style="--w:18.2%">10.4 GB</span></div><div class="kl good">KL <b>0.042</b></div></div>
+            <div class="row full"><div class="name"><b>Original</b>bf16, all experts</div><div class="track"><div class="bar" style="--w:100%"></div><span class="gb" style="--w:100%">≈65 GB</span></div><div class="kl">LCB <b>80.4%</b>*</div></div>
+            <div class="row"><div class="name"><b>qwen-mac-qhex</b>REAP 31.25%, HEX, qheal</div><div class="track"><div class="bar ours" style="--w:15.1%"></div><span class="gb" style="--w:15.1%">9.8 GB</span></div><div class="kl good">LCB <b>64.6–65.7%</b></div></div>
           </div>
         </div>
         <div class="model">
-          <h3>Qwen3-8B <span>dense</span></h3>
+          <h3>Qwen3-30B-A3B <span>128 experts, 8 active · KL to the original</span></h3>
           <div class="rows">
-            <div class="row"><div class="name"><b>int8</b>no pruning</div><div class="track"><div class="bar old" style="--w:16.7%"></div><span class="gb" style="--w:16.7%">9.5 GB</span></div><div class="kl good">KL <b>0.0008</b></div></div>
-            <div class="row"><div class="name"><b>BlackHole default</b>int4</div><div class="track"><div class="bar ours" style="--w:10.7%"></div><span class="gb" style="--w:10.7%">6.1 GB</span></div><div class="kl good">KL <b>0.070</b></div></div>
+            <div class="row full"><div class="name"><b>Original</b>bf16, all experts</div><div class="track"><div class="bar" style="--w:100%"></div><span class="gb" style="--w:100%">57 GB</span></div><div class="kl">KL <b>0</b></div></div>
+            <div class="row"><div class="name"><b>Old default</b>keep 50% experts, int8</div><div class="track"><div class="bar old" style="--w:24%"></div><span class="gb" style="--w:24%">13.7 GB</span></div><div class="kl bad">KL <b>0.158</b></div></div>
+            <div class="row"><div class="name"><b>GPTQ int4</b>keep 75% experts</div><div class="track"><div class="bar old" style="--w:18.2%"></div><span class="gb" style="--w:18.2%">10.4 GB</span></div><div class="kl good">KL <b>0.034</b></div></div>
+            <div class="row"><div class="name"><b>REAQ-HEX</b>keep 75%, 3.5 bpw</div><div class="track"><div class="bar ours" style="--w:16.7%"></div><span class="gb" style="--w:16.7%">9.5 GB</span></div><div class="kl good">KL <b>0.033</b></div></div>
+            <div class="row"><div class="name"><b>GPTQ int3</b>keep 75%, 3.25 bpw</div><div class="track"><div class="bar old" style="--w:14.4%"></div><span class="gb" style="--w:14.4%">8.2 GB</span></div><div class="kl bad">KL <b>0.083</b></div></div>
+            <div class="row"><div class="name"><b>HEX</b>keep 75%, 3.25 bpw</div><div class="track"><div class="bar ours" style="--w:14.4%"></div><span class="gb" style="--w:14.4%">8.2 GB</span></div><div class="kl good">KL <b>0.054</b></div></div>
           </div>
         </div>
-        <div class="axis" aria-hidden="true"><span></span><div><span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50 GB</span></div><span></span></div>
       </div>
-      <p class="note">Same scale for every bar. Round-to-nearest quantisation; a GPTQ-style quantiser is next and should cut the int4 error further. Calibration uses 64 sequences, which scored as well as 256.</p>
+      <p class="note">Bars are drawn to each model's original size. *80.4% is Qwen's published LiveCodeBench v6 score for the original; we did not run the original on our bench. The Qwen3.6 range is three distillation runs. Qwen3-30B sizes count the expert weights, which are nearly all of the model; runs on B200 and B300, 23 to 25 October 2026. KL is measured on held-out answers the original wrote.</p>
 
       <div class="lessons">
-        <div class="lesson"><span class="tag win">kept</span><p>For MoE, prune a quarter to three-eighths of the experts, then 4 bits. It beat every mix of bit widths we tried at the same size.</p></div>
-        <div class="lesson"><span class="tag loss">dropped</span><p>Per-expert bit widths, dropping whole layers, and int3 on dense models all lost. They stay in the lab, not in the defaults.</p></div>
-        <div class="lesson"><span class="tag win">kept</span><p>For dense models below about 6&nbsp;GB, prune 25% of the neurons and heal with real distillation: 5.4&nbsp;GB at KL 0.27, ahead of int3.</p></div>
+        <div class="lesson"><span class="tag win">kept</span><p>For MoE, prune a quarter to three-eighths of the experts, then quantize. Quantize harder before you prune more, and never past half the experts.</p></div>
+        <div class="lesson"><span class="tag loss">dropped</span><p>Trimming the output vocabulary (KL 0.070 → 0.389), dropping whole layers, MoEfy-then-prune, round-to-nearest and healing without training all lost.</p></div>
+        <div class="lesson"><span class="tag win">kept</span><p>Distillation could not teach shorter thinking, so the server caps it instead: a 16k thinking budget keeps 60% on LiveCodeBench with answers in about four minutes at most.</p></div>
+      </div>
+      <p class="note">Every chart, with dates and setups: <a href="https://claude.ai/artifact/EPTz8xAKPoPPnQnHHiaYYt">the full results page ↗</a></p>
+    </div>
+  </section>
+
+  <section id="techniques">
+    <div class="wrap">
+      <div class="eyebrow">Techniques</div>
+      <h2>Built on REAP, with methods that started here</h2>
+      <p class="lede">REAP decides which experts a purpose needs. Everything after that is BlackHole-Harness work, and each step is a named function you can open, read and fork.</p>
+      <div class="techs">
+        <article class="tech">
+          <div class="ab">REAP</div>
+          <div class="full">Router-weighted Expert Activation Pruning</div>
+          <p>Scores every expert by how much it contributes on text about your purpose, like "Debugging Python and Rust", and drops the ones you won't use. Our one-pass grouped scorer is 2.8× faster.</p>
+          <div class="proof">Qwen3.6: 31.25% of experts pruned at KL 0.0195, nearly free.</div>
+        </article>
+        <article class="tech">
+          <div class="ab">REAQ <span>original</span></div>
+          <div class="full">Router-weighted Expert Activation Quantization</div>
+          <p>The same REAP score sets each expert's bit width at a fixed average size, so the experts that matter most keep more precision. MoE only, never 2-bit.</p>
+          <div class="proof">Beats a random split of the same bits at 3.5 and 4.0 bpw.</div>
+        </article>
+        <article class="tech">
+          <div class="ab">HEX <span>original</span></div>
+          <div class="full">Header-Encoded eXperts</div>
+          <p>Each expert carries its own learned 8 or 16 level value table in its header. Weights become 3 or 4 bit indices in 32-weight blocks with FP8 scales, rounded with GPTQ.</p>
+          <div class="proof">KL 0.054 vs GPTQ int3 0.083 at 3.25 bpw: 35% less error.</div>
+        </article>
+        <article class="tech">
+          <div class="ab">qheal <span>original</span></div>
+          <div class="full">heal after quantization</div>
+          <p>Attention, routers and shared experts train around the frozen low-bit experts, through their own rounding. A safety net throws the heal away if held-out KL gets worse.</p>
+          <div class="proof">The net discarded a bad heal on Flint (0.307 → 0.402).</div>
+        </article>
+        <article class="tech">
+          <div class="ab">Traces <span>original</span></div>
+          <div class="full">shortest verified trace distillation</div>
+          <p>The teacher solves each contest problem several times, the tests run, and the student learns from the shortest answer that passes. On-policy rounds then fix its own mistakes.</p>
+          <div class="proof">The training behind the 64.6 to 65.7% Qwen3.6 build.</div>
+        </article>
+        <article class="tech">
+          <div class="ab">Gate</div>
+          <div class="full">quality and fit checks</div>
+          <p>Every recipe checks KL against held-out teacher answers and the real memory footprint, KV cache included. A run fails loudly instead of shipping a broken model.</p>
+          <div class="proof">Each model ships with a receipt of every number its run produced.</div>
+        </article>
       </div>
     </div>
   </section>
 
-  <section id="how">
+  <section id="parts">
     <div class="wrap">
-      <div class="eyebrow">The pipeline</div>
-      <h2>What happens between a Hugging Face id and a file you can run</h2>
-      <ol class="pipe">
-        <li data-k="model.detect"><h3>Detect</h3><p>Reads the config and weight index without downloading weights: family, dense or MoE, expert count, size, and whether the result can fit your target.</p></li>
-        <li data-k="data.teacher_gen"><h3>Calibrate</h3><p>The full model answers prompts about your purpose, like "Debugging Python and Rust". Those answers become the yardstick.</p></li>
-        <li data-k="score.reap"><h3>Score</h3><p>REAP measures how much each expert, or each neuron in a dense model, contributes on that text. Grouped matmuls make it 2.8× faster.</p></li>
-        <li data-k="prune.reap"><h3>Prune</h3><p>Drops what your purpose doesn't use. Critical neurons are protected so the model doesn't fall apart.</p></li>
-        <li data-k="train.heal"><h3>Heal</h3><p>Distils the pruned model back toward the original with LoRA, on the teacher's own answers.</p></li>
-        <li data-k="quant.gguf"><h3>Quantise</h3><p>4-bit weights with an importance matrix from your purpose, head kept at 8 bits.</p></li>
-        <li data-k="eval.agreement"><h3>Gate</h3><p>Checks KL against held-out teacher answers and the real memory footprint. A recipe fails loudly instead of shipping a broken model.</p></li>
-        <li data-k="package.gguf"><h3>Package</h3><p>A GGUF plus an Ollama Modelfile and a receipt of every number the run produced.</p></li>
-      </ol>
+      <div class="eyebrow">Open source</div>
+      <h2>Three parts, all Apache-2.0</h2>
+      <div class="parts">
+        <article class="part">
+          <div class="num">01 · pipeline</div>
+          <h3>BlackHole-Harness</h3>
+          <p>The pipeline that does the shrinking, on a rented GPU or your own.</p>
+          <ul>
+            <li>Preset recipes for any Hugging Face model, MoE or dense</li>
+            <li>Python recipe files from the desktop app: <code>--recipe my.bhr</code></li>
+            <li>A terminal UI with detached jobs that survive a dropped SSH</li>
+            <li>MLX, GGUF or safetensors out, with a receipt</li>
+          </ul>
+          <div class="repo"><a href="https://github.com/OliverVillson/BlackHole-Harness">github.com/OliverVillson/BlackHole-Harness ↗</a></div>
+        </article>
+        <article class="part">
+          <div class="num">02 · desktop app</div>
+          <h3>BlackHole-Dev</h3>
+          <p>An editor for building your own recipes, down to single weights.</p>
+          <ul>
+            <li>Recipes as Python, with autocomplete and lint</li>
+            <li>Every built-in function opens as source you can fork</li>
+            <li>A copilot that writes recipes, plus local chat with your models</li>
+            <li>Analysis panel, run on VM, 36 themes</li>
+          </ul>
+          <div class="repo">github.com/OliverVillson/Blackhole-Dev · <b>repo opens soon</b></div>
+        </article>
+        <article class="part">
+          <div class="num">03 · runtime</div>
+          <h3>BlackHole runtime</h3>
+          <p>Kernels that run HEX models without unpacking them first.</p>
+          <ul>
+            <li>HEX Triton MoE kernel for NVIDIA GPUs</li>
+            <li>A <code>blackhole-hex</code> plugin for vLLM</li>
+            <li>Metal HEX kernels for Apple silicon, through MLX</li>
+            <li>Kept apart from the pipeline, so either installs alone</li>
+          </ul>
+          <div class="repo"><a href="https://github.com/OliverVillson/BlackHole-Harness/tree/main/runtime">BlackHole-Harness/runtime ↗</a></div>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <section id="dev">
+    <div class="wrap">
+      <div class="eyebrow">BlackHole-Dev</div>
+      <h2>A desktop app for taking models apart</h2>
+      <div class="split">
+        <div>
+          <p class="lede" style="margin-top:0">BlackHole-Dev opens any model as parts: layers, heads, routers, experts with their REAP scores, neurons, single weights. A recipe is a Python file that edits those parts with named functions, and the app plans it on your Mac before a GPU is ever rented.</p>
+          <ul class="feats">
+            <li><b>Monaco editor</b> with recipe autocomplete, signature help, snippets, inline lint and split tab groups.</li>
+            <li><b>Copilot</b> that reads, plans and edits recipes, with your own Anthropic key or through Claude Code. Starting a VM or a run always needs your click.</li>
+            <li><b>Plan</b> runs the recipe dry from headers only: size, fit, KV cache and GPU time.</li>
+            <li><b>Analysis panel</b>: REAP heatmaps, router usage, weight stats, quantization error by format, two models side by side.</li>
+            <li><b>Run on VM</b> over SSH with a live job monitor, then <b>chat locally</b> with what you made through any OpenAI-compatible server.</li>
+          </ul>
+        </div>
+        <figure class="shot">
+          <img src="shots/dev-editor.webp" width="1100" height="900" alt="BlackHole-Dev: a Python recipe in the editor with a pending copilot change adding a qheal step, and the plan panel showing 128 to 96 experts per layer, HEX at 3.25 bits per weight and 9.8 GB, which fits a 16 GB Mac" loading="lazy">
+          <figcaption>A recipe, a copilot edit waiting for review, and the plan for a 16 GB Mac.</figcaption>
+        </figure>
+      </div>
+      <div class="duo">
+        <figure class="shot">
+          <img src="shots/dev-analysis.webp" width="1440" height="900" alt="The analysis panel showing a heatmap of REAP saliency per expert and layer" loading="lazy">
+          <figcaption>REAP scores per expert and layer in the analysis panel.</figcaption>
+        </figure>
+        <figure class="shot">
+          <img src="shots/04-describe.webp" width="1600" height="1142" alt="The schema screen in the terminal UI with a description typed into the describe box" loading="lazy">
+          <figcaption>The pipeline's terminal UI on the GPU box.</figcaption>
+        </figure>
+      </div>
+      <h3 style="margin-top:40px">36 themes, from Singularity to Lab Paper</h3>
+      <div class="themes">
+        <figure><img src="shots/theme-singularity.webp" width="550" height="280" alt="Singularity theme" loading="lazy"><figcaption>Singularity</figcaption></figure>
+        <figure><img src="shots/theme-lab-paper.webp" width="550" height="280" alt="Lab Paper theme" loading="lazy"><figcaption>Lab Paper</figcaption></figure>
+        <figure><img src="shots/theme-blueprint.webp" width="550" height="280" alt="Blueprint theme" loading="lazy"><figcaption>Blueprint</figcaption></figure>
+        <figure><img src="shots/theme-pulsar.webp" width="550" height="280" alt="Pulsar theme" loading="lazy"><figcaption>Pulsar</figcaption></figure>
+        <figure><img src="shots/theme-canopy.webp" width="550" height="280" alt="Canopy theme" loading="lazy"><figcaption>Canopy</figcaption></figure>
+        <figure><img src="shots/theme-dune.webp" width="550" height="280" alt="Dune theme" loading="lazy"><figcaption>Dune</figcaption></figure>
+        <figure><img src="shots/theme-broadsheet.webp" width="550" height="280" alt="Broadsheet theme" loading="lazy"><figcaption>Broadsheet</figcaption></figure>
+        <figure><img src="shots/theme-dracula.webp" width="550" height="280" alt="Dracula theme" loading="lazy"><figcaption>Dracula</figcaption></figure>
+      </div>
+    </div>
+  </section>
+
+  <section id="recipes">
+    <div class="wrap">
+      <div class="eyebrow">Recipes</div>
+      <h2>Recipes are Python files you can read, share and fork</h2>
+      <div class="split">
+        <div class="term">
+          <div class="bar-t"><span>recipes/qwen_mac_qhex.py</span><span>blackhole_dev</span></div>
+<pre class="py"><span class="k">from</span> blackhole_dev.recipe <span class="k">import</span> Recipe
+
+recipe = <span class="f">Recipe</span>(<span class="s">"blackhole/qwen-mac-qhex"</span>, <span class="s">"1.0.0"</span>,
+                tags=[<span class="s">"mac"</span>, <span class="s">"code"</span>, <span class="s">"moe"</span>])
+
+recipe.<span class="f">fn</span>(<span class="s">"calibrate"</span>, calib=<span class="s">"code"</span>)
+<span class="c"># drop 31.25% of routed experts, calibrated on code</span>
+recipe.<span class="f">fn</span>(<span class="s">"reap-gpu"</span>, ratio=0.3125)
+<span class="c"># shortest verified traces, then on-policy rounds</span>
+recipe.<span class="f">fn</span>(<span class="s">"distil"</span>, calib=<span class="s">"contest"</span>, opd_rounds=2)
+<span class="c"># HEX experts, REAQ tiers: top 10% at 16 levels</span>
+recipe.<span class="f">fn</span>(<span class="s">"mlx-export"</span>, hex=1, bits=3, hot=0.1)
+recipe.<span class="f">fn</span>(<span class="s">"qheal"</span>)</pre>
+        </div>
+        <div>
+          <p class="lede" style="margin-top:0">A recipe names the steps, and every step is a function whose source you can open. Fork <code>distil</code> and your copy replaces the built-in in that recipe. Start from a preset: REAP plus int4, the Mac coder above, or the REAQ codebook lab recipes.</p>
+          <div class="chips" aria-label="Preset recipes">
+            <span class="chip"><b>qwen-mac-qhex</b> 16 GB Mac coder</span>
+            <span class="chip"><b>moe-prune-int4</b> MoE default</span>
+            <span class="chip"><b>dense-prune-int4</b> dense default</span>
+            <span class="chip"><b>reaq-codebook</b></span>
+            <span class="chip"><b>reap-classic</b></span>
+            <span class="chip"><b>mac-16gb</b></span>
+          </div>
+          <h3 style="margin-top:36px">Or describe it in words</h3>
+          <p class="ask"><q>Make a recipe like qwen-mac-qhex for Qwen3-30B-A3B, drop the weakest 25% of experts.</q></p>
+          <p style="margin-top:14px;font-size:15px">The copilot drafts the recipe from your words and the editor lints it against the functions that actually exist. Changes show as a diff you accept or reject, and nothing runs on a GPU until you click.</p>
+        </div>
+      </div>
     </div>
   </section>
 
   <section id="install">
     <div class="wrap">
       <div class="eyebrow">Run it</div>
-      <h2>Your laptop drives, a rented GPU does the work</h2>
+      <h2>One line on a GPU box, then bring the model home</h2>
       <div class="split">
         <div>
           <div class="term">
-            <div class="bar-t"><span>~/ on your laptop</span><span>zsh</span></div>
-<pre><span class="p">$</span> pipx install blackhole-harness
-<span class="p">$</span> blackhole up --provider nebius --gpu b200 --yes
-<span class="c">  prices first; rents only with --yes</span>
-<span class="o">  ✓ b200 ready · harness installed</span>
-<span class="p">$</span> blackhole ssh
-<span class="c">  the TUI opens on the VM</span>
-<span class="p">$</span> blackhole down --keep-disk
-<span class="c">  stops billing, keeps the compile cache</span></pre>
+            <div class="bar-t"><span>~/ on the GPU box</span><span>bash</span></div>
+<pre><span class="p">$</span> curl -fsSL https://blackholeharness.dev/install.sh \
+    | bash
+<span class="c">  pipeline, TUI, REAPer, runtime, vLLM + HEX plugin</span>
+<span class="o">  ✓ installed · run it again to update</span>
+<span class="p">$</span> blackhole
+<span class="c">  the TUI; reattaches to a running job</span>
+<span class="p">$</span> python -m blackhole_pipeline \
+    --job ~/jobs/q --recipe my.bhr
+<span class="c">  or run a recipe from BlackHole-Dev directly</span></pre>
           </div>
           <ol class="steps">
-            <li><span>1</span><p><b>Install</b> on any machine with Python. Nothing heavy runs locally.</p></li>
-            <li><span>2</span><p><b>Rent a GPU.</b> Nebius by default, with evroc and Lambda adapters. You see the hourly price before anything is rented.</p></li>
-            <li><span>3</span><p><b>Pick a model and a recipe</b> in the TUI. Jobs run detached, so a dropped SSH connection doesn't kill a run. Reconnect and it picks up the log.</p></li>
-            <li><span>4</span><p><b>Have a GPU box already?</b> One line on it installs everything, and the same line updates it: <code>curl -fsSL https://blackholeharness.dev/install.sh | bash</code></p></li>
+            <li><span>1</span><p><b>Rent a GPU</b> anywhere you like (we use B200 and B300 on Nebius), or let <code>blackhole up</code> do it. You see the hourly price first.</p></li>
+            <li><span>2</span><p><b>Run the one line.</b> It picks the CUDA build your driver can run and installs everything. The same line updates it.</p></li>
+            <li><span>3</span><p><b>Pick a model and a recipe</b> in the TUI, or press Run on VM in BlackHole-Dev. Jobs run detached, so a dropped connection doesn't kill a run.</p></li>
+            <li><span>4</span><p><b>Copy the result home</b> and serve it with mlx_lm on a Mac, or llama.cpp and Ollama elsewhere.</p></li>
           </ol>
         </div>
         <figure class="shot">
           <img src="shots/05-running.webp" width="1600" height="1142" alt="The BlackHole TUI collapsing Qwen3 Next 80B with the Pocket coder schema for a Mac with 32 GB: pipeline progress bars, machine details and a list of schemas" loading="lazy">
-          <figcaption>Qwen3 Next 80B, Pocket coder recipe, aimed at a 32 GB Mac. Demo mode.</figcaption>
+          <figcaption>A run in the TUI, aimed at a 32 GB Mac. Demo mode.</figcaption>
         </figure>
-      </div>
-    </div>
-  </section>
-
-  <section id="schemas">
-    <div class="wrap">
-      <div class="eyebrow">Schemas</div>
-      <h2>Recipes are files you can read, share and fork</h2>
-      <div class="split">
-        <div class="term">
-          <div class="bar-t"><span>schemas/moe-prune-int4.toml</span><span>blackhole/v1</span></div>
-<pre class="toml"><span class="k">id</span> = <span class="s">"blackhole/moe-prune-int4"</span>
-<span class="k">title</span> = <span class="s">"Prune a little, quantise to 4 bits"</span>
-
-<span class="h">[targets]</span>
-<span class="k">architectures</span> = [<span class="s">"moe"</span>]
-
-<span class="h">[inputs.purpose]</span>
-<span class="k">type</span> = <span class="s">"text"</span>
-<span class="k">help</span> = <span class="s">"What should the model be good at?"</span>
-
-<span class="h">[[stage]]</span>
-<span class="k">kind</span> = <span class="s">"data.teacher_gen"</span>
-<span class="k">samples</span> = 64
-
-<span class="h">[[stage]]</span>
-<span class="k">kind</span> = <span class="s">"prune.reap"</span>
-<span class="k">ratio</span> = <span class="s">"${inputs.prune}"</span>   <span class="c"># 0.25 by default</span>
-
-<span class="h">[[stage.gates]]</span>
-<span class="k">metric</span> = <span class="s">"kl"</span>
-<span class="k">op</span> = <span class="s">"&lt;="</span>
-<span class="k">value</span> = 0.15</pre>
-        </div>
-        <div>
-          <p class="lede" style="margin-top:0">A schema is a short TOML file: which models it suits, what it asks you, the stages it runs, and the quality gates it must pass. Use the proven defaults, grab one from the marketplace, or write your own.</p>
-          <div class="chips" aria-label="Built-in schemas">
-            <span class="chip"><b>moe-prune-int4</b> MoE default</span>
-            <span class="chip"><b>dense-prune-int4</b> dense default</span>
-            <span class="chip"><b>laptop-moe-gguf</b></span>
-            <span class="chip"><b>reap-purpose</b></span>
-            <span class="chip"><b>dense-horizon-qat</b></span>
-            <span class="chip"><b>lab/</b> experiments</span>
-          </div>
-          <h3 style="margin-top:36px">Or describe it in words</h3>
-          <p class="ask"><q>Keep it great at SQL, drop everything else, it has to fit my 4070.</q></p>
-          <p style="margin-top:14px;font-size:15px">Claude or GPT drafts the schema from your words, the harness lints it against the stages that actually exist, and you review it before anything runs. Bring your own API key.</p>
-          <figure class="shot" style="margin-top:24px">
-            <img src="shots/04-describe.webp" width="1600" height="1142" alt="The schema screen in the TUI with a description typed into the describe box" loading="lazy">
-            <figcaption>Describing a schema in the TUI.</figcaption>
-          </figure>
-        </div>
       </div>
     </div>
   </section>
@@ -386,13 +529,13 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
     <div class="wrap">
       <div class="eyebrow">Targets</div>
       <h2>Tell it the machine, it sizes the model</h2>
-      <p class="lede">Pick where the model will live. Detection checks the fit before a run starts, and the footprint gate checks it again at the end, context window and KV cache included.</p>
+      <p class="lede">Pick where the model will live. Plan checks the fit before a run starts, and the footprint gate checks it again at the end, context window and KV cache included.</p>
       <div class="targets">
         <div class="t"><b>RTX 3060</b><span>12 GB · <i>11 GB</i> budget</span></div>
         <div class="t"><b>RTX 4070</b><span>12 GB · <i>11 GB</i> budget</span></div>
         <div class="t"><b>RTX 4090</b><span>24 GB · <i>22 GB</i> budget</span></div>
         <div class="t"><b>RTX 5090</b><span>32 GB · <i>30 GB</i> budget</span></div>
-        <div class="t"><b>Mac 16 GB</b><span>unified · <i>11 GB</i> budget</span></div>
+        <div class="t"><b>Mac 16 GB</b><span>unified · <i>12 GB</i> wired</span></div>
         <div class="t"><b>Mac 32 GB</b><span>unified · <i>24 GB</i> budget</span></div>
         <div class="t"><b>Mac 64 GB</b><span>unified · <i>50 GB</i> budget</span></div>
         <div class="t"><b>CPU, 32 GB</b><span>system RAM · <i>26 GB</i> budget</span></div>
@@ -403,7 +546,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
   <section>
     <div class="wrap">
       <div class="cta" style="margin-top:0">
-        <div class="cmd"><span class="p">$</span><code id="install-cmd-2">pipx install blackhole-harness</code><button class="copy" type="button" data-copy="install-cmd-2" id="copy-foot">copy</button></div>
+        <div class="cmd"><span class="p">$</span><code id="install-cmd-2">curl -fsSL https://blackholeharness.dev/install.sh | bash</code><button class="copy" type="button" data-copy="install-cmd-2" id="copy-foot">copy</button></div>
         <a class="btn" href="https://github.com/OliverVillson/BlackHole-Harness">Star on GitHub</a>
       </div>
     </div>
@@ -413,7 +556,7 @@ body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-a
 <footer class="end">
   <div class="wrap">
     <span>BlackHole-Harness · blackholeharness.dev · Apache-2.0</span>
-    <span>Built on REAP expert pruning. Numbers from B200 runs, 2026-10-23.</span>
+    <span>Built on REAP expert pruning. Numbers from B200/B300 runs and a MacBook Air M5, October 2026.</span>
   </div>
 </footer>
 

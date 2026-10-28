@@ -6,5 +6,5 @@ Vercel (`vercel.json` here): import the repo, framework preset **Other**, root d
 
 - `index.html` the site (inline CSS + one small script that draws the black hole and runs the copy buttons)
 - `page.html` the same page without the document wrapper, used for the claude.ai preview; edit this one, then regenerate `index.html` with `python3 build.py`
-- `shots/` TUI screenshots (WebP, from blackhole-tui/shots)
+- `shots/` TUI screenshots (WebP, from blackhole-tui/shots), BlackHole-Dev screenshots (`dev-*.webp`) and theme thumbnails (`theme-*.webp`)
 - `favicon.svg`
