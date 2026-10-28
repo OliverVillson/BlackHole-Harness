@@ -13,7 +13,7 @@ style, body = rest.split("</style>", 1)
 {head.strip()}
 <meta property="og:title" content="BlackHole-Harness">
 <meta property="og:description" content="Shrink any open-weight model until it runs on your own PC.">
-<meta property="og:image" content="https://blackholeharness.dev/shots/05-running.webp">
+<meta property="og:image" content="https://blackholeharness.dev/shots/dev-editor.webp">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <style>{style}</style>
