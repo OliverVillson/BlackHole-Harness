@@ -38,6 +38,8 @@ main() {
   LLAMACPP_REF="${LLAMACPP_REF:-}"   # a llama.cpp tag; empty = the newest bNNNN release
   TORCH_INDEX=""      # override with --torch-index
   EXTRAS_OPT=1        # flash-linear-attention, mlx[cpu]: best effort
+  DEV="auto"          # blackhole_dev (BlackHole-Dev's package, for recipes run from the app): auto | yes | no
+  DEV_SRC="${BLACKHOLE_DEV_SRC:-$HOME/Blackhole-Dev}"
   DRY=0
 
   APT=1
@@ -52,6 +54,8 @@ main() {
       --llamacpp) LLAMACPP="$2"; shift ;;
       --torch-index) TORCH_INDEX="$2"; shift ;;
       --minimal) EXTRAS_OPT=0 ;;
+      --dev) DEV="$2"; shift ;;
+      --dev-src) DEV_SRC="$2"; shift ;;
       --no-apt) APT=0 ;;
       --dry-run) DRY=1 ;;
       -y|--yes) ;;  # nothing asks; accepted so cloud-init lines stay stable
@@ -75,6 +79,7 @@ main() {
   install_torch
   install_harness
   install_optional
+  install_dev
   install_vllm
   install_llamacpp
   verify
@@ -94,6 +99,9 @@ install.sh [options]
   --llamacpp yes|no   build llama.cpp for the GGUF ops (default no; schemas that need it ask)
   --torch-index URL   force a torch wheel index, e.g. https://download.pytorch.org/whl/cu126
   --minimal           skip flash-linear-attention and mlx[cpu]
+  --dev auto|yes|no   blackhole_dev, which recipes run from the BlackHole-Dev app need (auto: install
+                      it when ~/Blackhole-Dev is there or the repo can be cloned; yes: fail otherwise)
+  --dev-src DIR       where that checkout is (default ~/Blackhole-Dev; a copy without .git is fine)
   --no-apt            skip apt (no sudo); python3-venv, git and tmux must already be there
   --dry-run           print what would run, change nothing
   -y, --yes           no questions
@@ -183,6 +191,7 @@ apt_deps() {
 }
 
 # ---------- hardware: same rules as reaper_hw/plan.py _software()
+GLOBAL=""
 GPU_NAME=""; GPU_MEM=0; GPU_CC=""; DRIVER=""; DRV_CUDA=""; N_GPUS=0
 detect_gpu() {
   if ! command -v nvidia-smi >/dev/null; then
@@ -353,6 +362,30 @@ install_optional() {
   fi
 }
 
+# blackhole_dev: from a checkout or copy in ~/Blackhole-Dev (an rsync from the laptop works), else a
+# clone when this machine can read the repo. Editable, so a fresh rsync takes effect without a rerun.
+DEV_URL="https://github.com/OliverVillson/Blackhole-Dev.git"
+install_dev() {
+  [ "$DEV" = no ] && return 0
+  if [ ! -f "$DEV_SRC/pyproject.toml" ] && [ ! -e "$DEV_SRC" ]; then
+    if [ "$DRY" = 1 ] || GIT_TERMINAL_PROMPT=0 git clone -q "$DEV_URL" "$DEV_SRC" >>"$LOG" 2>&1; then
+      [ "$DRY" = 1 ] && printf '%s  $ git clone %s %s%s\n' "$D" "$DEV_URL" "$DEV_SRC" "$N"
+    else
+      rm -rf "$DEV_SRC"
+      local msg="blackhole_dev not installed: this machine cannot clone $DEV_URL. Recipes from the app need it; from the laptop: rsync -a --exclude .git --exclude app ~/src/Blackhole-Dev/ $(id -un)@$(vm_ip):Blackhole-Dev/ then run this installer again"
+      [ "$DEV" = yes ] && die "$msg"
+      warn "$msg"
+      return 0
+    fi
+  elif [ -d "$DEV_SRC/.git" ]; then
+    GIT_TERMINAL_PROMPT=0 try git -C "$DEV_SRC" pull -q --ff-only || warn "could not update $DEV_SRC (git pull); installing it as it is"
+  fi
+  [ "$DRY" = 1 ] || [ -f "$DEV_SRC/pyproject.toml" ] || die "$DEV_SRC is not a Blackhole-Dev checkout (no pyproject.toml)"
+  say "pip install blackhole_dev (editable from $DEV_SRC)"
+  PIP -e "$DEV_SRC" --extra-index-url "$TORCH_INDEX"
+  ok "blackhole_dev $( [ "$DRY" = 1 ] || "$VENV/bin/python" -c 'from importlib.metadata import version as v; print(v("blackhole-dev"))' 2>/dev/null)"
+}
+
 install_vllm() {
   case "$VLLM" in
     no) return 0 ;;
@@ -461,19 +494,41 @@ echo "no harness command in $VENV/bin; rerun the installer" >&2; exit 1
 EOF
   chmod +x "$bin/blackhole"
   ln -sf "$bin/blackhole" "$bin/bh"
-  case ":$PATH:" in *":$bin:"*) ;; *)
-    grep -qs 'BlackHole-Harness' "$HOME/.bashrc" || printf '\n# BlackHole-Harness\nexport PATH="$HOME/.local/bin:$PATH"\n' >>"$HOME/.bashrc"
-  esac
-  ok "blackhole and bh in $bin"
+  # new login shells: ~/.profile (Ubuntu's adds ~/.local/bin only when it existed at login) and
+  # ~/.bashrc. A plain `ssh host blackhole` reads neither past .bashrc's interactive check, so with
+  # sudo the commands also go in /usr/local/bin, which every shell has on PATH.
+  local rc
+  for rc in "$HOME/.profile" "$HOME/.bashrc"; do
+    grep -qs '# BlackHole-Harness' "$rc" || \
+      printf '\n# BlackHole-Harness\ncase ":$PATH:" in *":$HOME/.local/bin:"*) ;; *) PATH="$HOME/.local/bin:$PATH" ;; esac\n' >>"$rc"
+  done
+  GLOBAL=""
+  if [ -w /usr/local/bin ] || { [ "$(id -u)" != 0 ] && sudo -n true 2>/dev/null; }; then
+    local s=""; [ -w /usr/local/bin ] || s="sudo"
+    if $s ln -sf "$bin/blackhole" /usr/local/bin/blackhole && $s ln -sf "$bin/blackhole" /usr/local/bin/bh; then
+      GLOBAL=/usr/local/bin
+    fi
+  fi
+  ok "blackhole and bh in $bin${GLOBAL:+ and $GLOBAL}"
 }
 
 done_msg() {
+  # without /usr/local/bin, the full path works in any shell, here and over ssh
+  local cmd="blackhole"
+  [ -n "${GLOBAL:-}" ] || cmd="~/.local/bin/blackhole"
   printf '\n%s  installed.%s  From your laptop:\n\n' "$W" "$N"
-  printf '    %sssh -t %s@<vm-ip> blackhole%s\n\n' "$O" "$(id -un)" "$N"
-  printf '  or here: %sblackhole%s (open a new shell first if it is not found)\n' "$O" "$N"
+  printf '    %sssh -t %s@%s %s%s\n\n' "$O" "$(id -un)" "$(vm_ip)" "$cmd" "$N"
+  printf '  or here, in this shell: %s%s%s\n' "$O" "$cmd" "$N"
   printf '  update later: run the same install command again\n'
   [ "$DRY" = 1 ] && printf '%s  (dry run: nothing was changed)%s\n' "$D" "$N"
   return 0
+}
+
+# the address this SSH session came in on, when it is a public one; else a placeholder
+vm_ip() {
+  local ip
+  ip=$(echo "${SSH_CONNECTION:-}" | awk '{print $3}')
+  case "$ip" in ""|10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|127.*|*:*) echo "<vm-ip>" ;; *) echo "$ip" ;; esac
 }
 
 # everything above is definitions: a half-downloaded `curl | bash` runs nothing
