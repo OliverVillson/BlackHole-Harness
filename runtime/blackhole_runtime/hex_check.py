@@ -9,19 +9,19 @@
    relative error (bf16 activations; the reference keeps fp32 weights).
 2. Speed, per MoE layer (gate + up + down for every routed slot), next to vLLM's own fused MoE
    on the same shapes: bf16 experts and int4 W4A16 (group 128, what GPTQ int4 exports use).
-   Decode batch sizes 1 / 8 / 32 tokens and a 1024- and 4096-token prompt.
+   Decode batch sizes 1 / 8 / 32 / 128 tokens and a 1024- and 4096-token prompt, through both
+   HEX paths (fused kernel, and decode-to-bf16 + bf16 MoE) and the automatic choice between them.
 Memory: a few hundred MB of random experts, no model download; safe next to a running job.
 """
 
 from __future__ import annotations
 
 import argparse
-import os
 import time
 
 import torch
 
-from blackhole_runtime.hex_moe import HexTier, hex_moe
+from blackhole_runtime.hex_moe import HexTier, hex_moe, hex_moe_fused
 from blackhole_runtime.hex_ref import moe_reference, random_parts
 
 
@@ -108,45 +108,48 @@ def main(argv=None):
           f"expert width {I}, top-{k}")
     tiers, ref = build(E, H, I, hot, dev)
     ok = True
-    for T in (1, 7, 300):
+    for T, path in ((1, "fused"), (7, "fused"), (300, "fused"), (300, "dequant")):
         ids, w = routing(T, E, k, dev, seed=T)
         x = (torch.randn(T, H, device=dev) * 0.5).to(torch.bfloat16)
-        got = hex_moe(x, w, ids, tiers).float()
+        got = hex_moe(x, w, ids, tiers, path=path).float()
         r = moe_reference(x, w, ids, ref)
         err = float((got - r).abs().max() / r.abs().max())
-        print(f"  {T:4d} tokens: max rel error vs reference {err:.2e}")
+        print(f"  {T:4d} tokens, {path:7s}: max rel error vs reference {err:.2e}")
         ok &= err < 2e-2
 
     base = vllm_baselines(E, H, I, dev)
     gb = 3 * H * I * (3.25 * (E - hot) + 4.25 * hot) / E / 8 / 1e9   # bytes per routed expert, HEX
-    print("  per MoE layer, microseconds (lower is better):")
-    print(f"  {'tokens':>7} {'HEX':>9} " + " ".join(f"{n:>16}" for n in base))
-    for T in (1, 8, 32, 1024, 4096):
+    print("  per MoE layer, microseconds (lower is better); 'auto' is what serving uses:")
+    print(f"  {'tokens':>7} {'HEX auto':>9} {'HEX fused':>10} {'HEX dequant':>12} " + " ".join(f"{n:>16}" for n in base))
+    for T in (1, 8, 32, 128, 1024, 4096):
         ids, w = routing(T, E, k, dev, seed=T)
         x = (torch.randn(T, H, device=dev) * 0.5).to(torch.bfloat16)
-        t_hex = timeit(lambda: hex_moe(x, w, ids, tiers), iters=20 if T > 512 else 100)
-        row = f"  {T:7d} {t_hex:9.1f} "
+        n_it = 20 if T > 512 else 100
+        t = {p: timeit(lambda p=p: hex_moe(x, w, ids, tiers, path=p), iters=n_it) for p in ("auto", "fused", "dequant")}
+        row = f"  {T:7d} {t['auto']:9.1f} {t['fused']:10.1f} {t['dequant']:12.1f} "
         for fn in base.values():
             try:
-                row += f"{timeit(lambda: fn(x, w, ids), iters=20 if T > 512 else 100):16.1f} "
+                row += f"{timeit(lambda: fn(x, w, ids), iters=n_it):16.1f} "
             except Exception as e:  # noqa: BLE001
                 row += f"{'err ' + type(e).__name__:>16} "
         if T == 1:
-            row += f"   HEX weight traffic {k * gb / (t_hex * 1e-6):.0f} GB/s"
+            row += f"   HEX weight traffic {k * gb / (t['fused'] * 1e-6):.0f} GB/s"
         print(row)
         if a.sweep:
             best = []
-            for tiles in ("16,32,64", "16,64,64", "16,64,128", "16,128,64", "32,64,64", "64,64,64", "64,128,64",
-                          "128,128,64", "64,64,128"):
+            for tiles in ("16,16,64", "16,32,64", "16,32,128", "16,64,64", "16,64,128", "32,32,64", "32,64,64",
+                          "64,64,64", "64,128,64", "128,128,64", "128,64,64"):
                 for warps in (4, 8):
-                    os.environ["BLACKHOLE_HEX_TILES"] = f"{tiles},{warps},3"
-                    try:
-                        best.append((timeit(lambda: hex_moe(x, w, ids, tiers), iters=20), f"{tiles} w{warps}"))
-                    except Exception:  # noqa: BLE001
-                        pass
-            os.environ.pop("BLACKHOLE_HEX_TILES", None)
+                    for stages in (2, 3):
+                        bm, bn, bk = map(int, tiles.split(","))
+                        cfg = {"BLOCK_M": bm, "BLOCK_N": bn, "BLOCK_K": bk, "num_warps": warps, "num_stages": stages}
+                        try:
+                            best.append((timeit(lambda: hex_moe_fused(x, w, ids, tiers, cfg), iters=20),
+                                         f"{tiles} w{warps} s{stages}"))
+                        except Exception:  # noqa: BLE001
+                            pass
             best.sort()
-            print("          best tiles BM,BN,BK: " + ", ".join(f"{n} {t:.1f}" for t, n in best[:3]))
+            print("          fused, best tiles BM,BN,BK: " + ", ".join(f"{n} {v:.1f}" for v, n in best[:3]))
     print("HEX Triton kernel OK" if ok else "HEX Triton kernel MISMATCH: send this output")
     return 0 if ok else 1
 

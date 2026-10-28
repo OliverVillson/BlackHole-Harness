@@ -9,7 +9,7 @@ import torch  # noqa: E402
 
 pytest.importorskip("triton")
 
-from blackhole_runtime.hex_moe import HexTier, align, hex_moe  # noqa: E402
+from blackhole_runtime.hex_moe import HexTier, align, dequant_all, hex_moe, hex_moe_fused  # noqa: E402
 from blackhole_runtime.hex_ref import HEX_BLOCK, hex_dequant, moe_reference, pack, random_parts  # noqa: E402
 
 
@@ -45,20 +45,20 @@ def test_pack_roundtrip_matches_bitstream():
 
 
 def test_align_groups_and_pads():
-    local = torch.tensor([2, -1, 0, 2, 2, 1, -1, 0])
-    sid, eid = align(local, 3, 4)
-    S = local.numel()
+    ids = torch.tensor([2, 0, 0, 2, 2, 1, 3, 0])
+    sid, eid, npp = align(ids, 4, 4)
+    S = ids.numel()
     seen = []
     for b, e in enumerate(eid.tolist()):
         rows = sid[b * 4:(b + 1) * 4].tolist()
-        if e < 0:
-            assert all(r == S for r in rows)
+        if b * 4 >= int(npp):
+            assert e < 0
             continue
         for r in rows:
             if r < S:
-                assert local[r] == e
+                assert ids[r] == e
                 seen.append(r)
-    assert sorted(seen) == [i for i in range(S) if local[i] >= 0]
+    assert sorted(seen) == list(range(S))
 
 
 @pytest.mark.parametrize("T,split", [(1, 0), (3, 5), (40, 4)])
@@ -72,10 +72,28 @@ def test_hex_moe_matches_reference(T, split):
     ids, w = routing(T, E, k, seed=T)
     x = torch.randn(T, H) * 0.5
     ref = moe_reference(x, w, ids, ref_tiers)
-    for cfg in (None, {"BLOCK_M": 16, "BLOCK_N": 32, "BLOCK_K": 32, "num_warps": 4, "num_stages": 1}):
-        got = hex_moe(x, w, ids, tiers, cfg)
+    small = {"BLOCK_M": 16, "BLOCK_N": 32, "BLOCK_K": 32, "num_warps": 4, "num_stages": 1}
+    runs = [hex_moe(x, w, ids, tiers), hex_moe(x, w, ids, tiers, path="dequant"),
+            hex_moe_fused(x, w, ids, tiers, small, align_mode="torch"),
+            hex_moe_fused(x, w, ids, tiers, small, align_mode="direct")]
+    for got in runs:
         err = (got - ref).abs().max() / ref.abs().max()
         assert err < 1e-4, err
+
+
+def test_dequant_all_matches_reference():
+    E, H, I = 7, 64, 32
+    tiers = make_tiers(E, H, I, 3, seed=9)
+    want_g = {int(e): hex_dequant(*(t.gate_proj[q][i:i + 1] for q in ("idx", "block_scale", "expert_scale", "levels")),
+                                  t.bits)[0] for t in tiers for i, e in enumerate(t.experts.tolist())}
+    want_d = {int(e): hex_dequant(*(t.down_proj[q][i:i + 1] for q in ("idx", "block_scale", "expert_scale", "levels")),
+                                  t.bits)[0] for t in tiers for i, e in enumerate(t.experts.tolist())}
+    for t in tiers:
+        t.prepare(E)
+    w13, w2 = dequant_all(tiers, torch.float32)
+    for e in range(E):
+        assert torch.allclose(w13[e, :I], want_g[e], atol=1e-6)
+        assert torch.allclose(w2[e], want_d[e], atol=1e-6)
 
 
 def test_mlx_tiers_become_hex_tiers_in_router_order():
