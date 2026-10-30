@@ -1,6 +1,7 @@
 """Stage detect: what the source model is (family, dense or MoE, experts, size) from its
 config.json and weight index, before anything big is downloaded; and whether the disk can hold
-the run. This pipeline compresses MoE models (REAP needs routed experts)."""
+the run. This pipeline compresses MoE models (REAP needs routed experts); a recipe without REAP
+(config dense_ok, see blackhole_pipeline.recipe) may start from a dense one."""
 
 from __future__ import annotations
 
@@ -20,7 +21,7 @@ def run(bh, rj) -> None:
     d = detect.detect(str(local) if local else bh.config["model"])
     shape = (f"{d.family} · moe {d.total_b:.1f}B, {d.experts} experts top-{d.top_k}" if d.experts
              else f"{d.family} · dense {d.total_b:.1f}B")
-    if not d.experts:
+    if not d.experts and not bh.config.get("dense_ok"):
         raise RuntimeError(f"{shape}: this schema needs a mixture-of-experts model (dense models: dense-prune-int4)")
     p = bh.params
     src_gb = d.total_b * 2  # bf16 source

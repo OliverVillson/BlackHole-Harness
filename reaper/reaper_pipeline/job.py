@@ -50,6 +50,7 @@ class Config:
     trust_remote_code: bool | None = None  # models whose code lives on the Hub (Kimi K2); None = when needed
     models_dir: str = ""             # where downloads go; default <REAPER_HOME>/models
     out_name: str = ""               # name of the output directory; default <model>-REAP-<n>e
+    dense_ok: bool = False           # plan a dense model too (a recipe whose own functions convert it)
     seed: int = 0
 
     @classmethod

@@ -246,9 +246,17 @@ def job_config(rec: dict, manifest: dict, model: str | None = None, inputs: dict
     purpose = next((s["params"]["purpose"] for s in steps if "purpose" in s["params"]), None)
     if purpose is None:
         purpose = vals.get("purpose") or raw.get("purpose") or ""
+    stages = stage_list(raw)
     return {"model": model, "schema": raw["id"], "schema_version": raw.get("version"), "recipe": bundle_sha,
             "target": manifest.get("target") or meta.get("target") or "", "purpose": purpose,
-            "steps": steps, "stage_list": stage_list(raw), "inputs": vals, "runner": "pipeline"}
+            "steps": steps, "stage_list": stages, "inputs": vals, "runner": "pipeline",
+            "dense_ok": dense_ok(stages)}
+
+
+def dense_ok(stages: list[str]) -> bool:
+    """A recipe without REAP (no score/prune stage) may start from a dense model: its own job
+    functions do the work (e.g. dense-to-smoe), and detect and plan let the dense model through."""
+    return not {"score", "prune"} & set(stages)
 
 
 def jobfn_module() -> str:

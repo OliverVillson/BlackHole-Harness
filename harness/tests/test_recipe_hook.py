@@ -144,3 +144,38 @@ def test_main_reports_a_bad_bundle_as_an_event(tmp_path, capsys):
     assert ev["stage"] == "pipeline" and ev["status"] == "error" and "recipe:" in ev["msg"]
     with pytest.raises(SystemExit):
         pm.main(["--job", str(tmp_path / "job"), "--model", "x"])
+
+
+def test_a_recipe_without_reap_may_start_from_a_dense_model(tmp_path):
+    from blackhole_pipeline.job import BHJob
+    from blackhole_pipeline.stages import detect
+    from reaper_pipeline.stages import plan
+
+    dense = tmp_path / "Qwen3-dense"
+    dense.mkdir()
+    (dense / "config.json").write_text(json.dumps({
+        "model_type": "qwen3", "architectures": ["Qwen3ForCausalLM"], "hidden_size": 64, "intermediate_size": 256,
+        "num_hidden_layers": 2, "num_attention_heads": 4, "num_key_value_heads": 2, "vocab_size": 300}))
+    reap = raw_recipe({"id": "reap", "kind": "pipeline.reap", "prune": 0.25})
+    fns = raw_recipe({"id": "build", "kind": "job.fn", "fn": "smoe-build"})
+    assert rc.dense_ok(rc.stage_list(fns)) and not rc.dense_ok(rc.stage_list(reap))
+    for raw, ok in ((reap, False), (fns, True)):
+        job = tmp_path / ("ok" if ok else "no")
+        cfg = rc.prepare(job, make_bundle(tmp_path / f"{ok}.bhr", raw), model=str(dense))
+        assert cfg["dense_ok"] is ok
+        bh = BHJob(job)
+        rj = bh.reaper()
+        assert rj.config.dense_ok is ok
+        if ok:
+            detect.run(bh, rj)
+            assert rj.is_done("detect") and bh.read("detect.json")["experts"] == 0
+        else:
+            with pytest.raises(RuntimeError, match="needs a mixture-of-experts model"):
+                detect.run(bh, rj)
+        # plan: past the MoE check with dense_ok (this machine may still lack the GPU it wants)
+        try:
+            plan.run(rj)
+        except RuntimeError as e:
+            assert ("not a mixture-of-experts" in str(e)) is not ok, e
+        else:
+            assert ok

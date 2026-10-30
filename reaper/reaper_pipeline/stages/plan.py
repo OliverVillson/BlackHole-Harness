@@ -52,7 +52,7 @@ def run(job: Job) -> None:
         raise ValueError(f"prune must be between 0 and 1, got {cfg.prune}")
     emit(STAGE, pct=10, msg=f"reading {cfg.model} config")
     shape = moe_shape(model_config(job))
-    if shape["experts"] < 2:
+    if shape["experts"] < 2 and not cfg.dense_ok:
         raise RuntimeError(f"{cfg.model} is not a mixture-of-experts model (no expert count in its config)")
     job.write("model.json", shape)
     log(f"model: {shape}")
@@ -69,7 +69,8 @@ def run(job: Job) -> None:
     if not prof.get("ok", True):
         raise RuntimeError("; ".join(prof.get("problems") or ["the planner refused this model on this machine"]))
     job.mark_done(STAGE)
-    emit(STAGE, "done", 100, f"{shape['model_type']}: {shape['experts']} experts top-{shape['top_k']} · "
+    kind = f"{shape['experts']} experts top-{shape['top_k']}" if shape["experts"] else "dense"
+    emit(STAGE, "done", 100, f"{shape['model_type']}: {kind} · "
                              f"{prof.get('summary') or prof['device']}")
 
 
