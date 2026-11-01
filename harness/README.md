@@ -51,6 +51,25 @@ blackhole flint --schema reaq-codebook       # starts straight away; F6 for the 
 
 `python -m pytest tests` includes a full CPU run on a tiny random Flint.
 
+## SWE-bench Pro V2 on one GPU VM
+
+`scripts/swebench-pro.sh` runs Scale AI's SWE-bench Pro V2 (642 real GitHub tasks in 11 repos,
+Harbor format, public images on ghcr.io) against a local model:
+
+```bash
+bash ~/BlackHole-Harness/harness/scripts/swebench-pro.sh ~/models/qwen3.6-blackhole-9.8GB --tasks smoke
+```
+
+It converts a BlackHole MLX HEX export to a vLLM `blackhole-hex` folder once (`blackhole_runtime.verify`),
+serves it with `vllm serve` (or reuses a server already on port 8000), installs Harbor and
+mini-swe-agent in `~/.blackhole/swebench/venv`, then runs mini-swe-agent with Scale's locked text
+prompt on this machine, sending only bash into each task's offline container. Every captured diff
+is re-graded on a fresh container (`patch_replay`), which is the score to report. `--tasks` is
+`smoke` (20 tasks over all repos), `hard` (HARD-51), `all` (642) or a number; `-n` sets how many
+tasks run at once (default from CPUs and RAM, at most 32). Rerunning the same command resumes.
+Results: `~/.blackhole/swebench/runs/NAME/results.json` (`{instance_id: resolved}`) and
+`results.summary.json`. Needs docker; images are pruned when free disk drops below `MIN_FREE_GB`.
+
 ## Layout
 
 - `art.py` the black hole (generated from a small lensing model onto half-block pixels) and the banner
