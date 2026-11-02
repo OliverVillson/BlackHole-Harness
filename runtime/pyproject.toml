@@ -19,6 +19,7 @@ blackhole_hex = "blackhole_runtime.vllm_hex:register"
 [project.scripts]
 blackhole-hex-check = "blackhole_runtime.hex_check:main"
 blackhole-hex-convert = "blackhole_runtime.convert:main"
+blackhole-hex-check-folder = "blackhole_runtime.check_folder:main"
 
 [tool.setuptools.packages.find]
 include = ["blackhole_runtime*"]

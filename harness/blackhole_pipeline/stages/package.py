@@ -35,6 +35,7 @@ def run(bh, rj) -> None:
     h = rj.read("work/heal.json") or {}
     x = rj.read("work/mlx.json") or {}
     qh = rj.read("work/qheal.json") or {}
+    hv = rj.read("work/hexvllm.json") or {}
     base = {"top1": ev.get("top1_agreement"), "kl": ev.get("kl"), "ppl_student": ev.get("ppl_pruned"),
             "size_gb": reap.get("bytes_after", 0) / 1024 ** 3 if reap.get("bytes_after") else None}
     base = {k: v for k, v in base.items() if v is not None}
@@ -48,6 +49,7 @@ def run(bh, rj) -> None:
              *([row(f"MLX for Apple silicon ({x.get('format', '')})",
                     {**x, "kl": x.get("unhealed_kl", x.get("kl")), "top1": x.get("unhealed_top1", x.get("top1"))})]
                if x else []),
+             *([row(f"vLLM on NVIDIA ({hv.get('format', '')})", hv)] if hv else []),
              *([row("+ heal around the quantized MLX model", x)] if x.get("healed_after_quant") else [])]
     b = rj.read("work/bench.json") or {}
     if b.get("runs"):
@@ -59,7 +61,8 @@ def run(bh, rj) -> None:
     ppl_t = ev.get("ppl_teacher")
     gd, qd = bh.gptq_dir(rj), bh.reaq_dir(rj)
     xd = Path(x["out"]) if x.get("out") else None
-    final = xd if xd and xd.exists() else gd if gd.exists() else rj.final_dir
+    hd = Path(hv["out"]) if hv.get("out") else None
+    final = xd if xd and xd.exists() else hd if hd and hd.exists() else gd if gd.exists() else rj.final_dir
     steps = [f"REAP {reap.get('experts_orig')} → {reap.get('experts_kept')} routed experts per layer "
              f"(calibration: {rj.config.purpose or rj.config.calib})"]
     if h.get("kept"):
@@ -74,6 +77,8 @@ def run(bh, rj) -> None:
     if x:
         steps.append(f"MLX for Apple silicon: {x.get('format')}; attention / shared experts {p['mlx_attn_bits']}-bit, "
                      f"embedding {p['mlx_embed_bits']}-bit, LM head {p['mlx_head_bits']}-bit; routers and norms bf16")
+    if hv:
+        steps.append(f"{hv.get('format')} (BlackHole-Harness HEX + REAQ); every other tensor as in the pruned checkpoint")
     if x.get("healed_after_quant"):
         steps.append(f"heal again around the quantized MLX model ({qh.get('steps')} steps; experts frozen at 3-bit, "
                      "attention trained through its rounding)")
@@ -88,17 +93,24 @@ def run(bh, rj) -> None:
                  f"mlx_lm.generate --model {xd.name} --trust-remote-code --prompt 'Write a binary search in Python'",
                  "```", "", "On a 16 GB Mac add `--prompt-concurrency 1 --prefill-step-size 512 --prompt-cache-size 2` "
                  "to the server and close other large apps; no system setting is needed."]
+    if hd and hd.exists():
+        card += ["", "## Serve it with vLLM (NVIDIA)", "",
+                 "The experts run through the BlackHole HEX kernel, a vLLM plugin in the BlackHole-Harness runtime:", "",
+                 "```", "pip install vllm",
+                 "pip install 'blackhole-runtime @ git+https://github.com/OliverVillson/BlackHole-Harness#subdirectory=runtime'",
+                 f"vllm serve {hd.name} --max-model-len 32768", "```", "",
+                 "One GPU (no tensor or expert parallelism yet)."]
     card.append("")
-    for d in (gd, qd, xd):
+    for d in (gd, qd, xd, hd):
         if d and d.exists():
             (d / "README.md").write_text("\n".join(card).replace(f"# {final.name}", f"# {d.name}", 1))
-    links = [d for d in (rj.out_dir, rj.quant_dir, gd, qd, bh.healed_dir(rj), xd) if d and d.exists()]
+    links = [d for d in (rj.out_dir, rj.quant_dir, gd, qd, bh.healed_dir(rj), xd, hd) if d and d.exists()]
     for d in links:
         bh.link(d)
-    size = x.get("size_gb") if x else g.get("size_gb")
+    size = x.get("size_gb") if x else hv.get("size_gb") if hv else g.get("size_gb")
     receipt = {"schema": bh.config.get("schema"), "model_in": bh.config["model"], "model": str(final),
                "finished": time.strftime("%Y-%m-%d %H:%M:%S"), "params": p, "size_gb": size,
-               "results": {"reap_bf16": base, "heal": h, "gptq_int4": g, "reaq_codebook": q, "mlx": x, "qheal": qh,
+               "results": {"reap_bf16": base, "heal": h, "gptq_int4": g, "reaq_codebook": q, "mlx": x, "hex_vllm": hv, "qheal": qh,
                            "bench": {k: v for k, v in b.items() if k != "runs"}},
                "artifacts": [str(d) for d in links], "gates_passed": True}
     bh.write("receipt.json", receipt)

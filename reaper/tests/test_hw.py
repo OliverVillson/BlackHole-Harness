@@ -142,3 +142,37 @@ def test_cli_json(monkeypatch, tmp_path, capsys):
     assert out["hardware"]["fp8"] and out["plan"]["ok"]
     assert main(["--work-dir", str(tmp_path)]) == 0
     assert "8x B200" in capsys.readouterr().out
+
+
+def test_qwen38_flash_next_on_one_b300(monkeypatch, tmp_path):
+    """Qwen3.8-Flash-Next (qwen4_exp): 360 GB of bf16 of which only ~121B parameters are routed
+    experts (the 51B n-gram embedding, vision tower and MTP head are not). On one B300 (288 GB):
+    the teacher serves on-the-fly fp8 and REAP spills the rest of the weights to RAM."""
+    import pathlib
+    cfg = json.loads((pathlib.Path(__file__).parent / "configs" / "qwen3.8-flash-next.json").read_text())
+    m = model_info_from_config("Qwen/Qwen3.8-Flash-Next", cfg, checkpoint_bytes=359_999_963_128)
+    assert m.experts == 512 and m.top_k == 10 and m.moe_layers == 48
+    assert m.expert_params_b == pytest.approx(48 * 512 * 3 * 2560 * 640 / 1e9, rel=1e-3)
+    assert m.pruned_bf16_gb(0.25) == pytest.approx((360.0 - 0.25 * 241.6) / 1.0737, rel=0.01)
+    smi = "0, NVIDIA B300 SXM6 AC, 294912, 294000, 10.3, GPU-b300-0, 580.65.06"
+    hw = fake_machine(monkeypatch, tmp_path, smi)
+    p = plan(hw, m, 0.25)
+    assert p.ok, p.problems
+    assert p.teacher["quantization"] == "fp8" and p.teacher["tensor_parallel_size"] == 1
+    assert p.reap["placement"] == "cpu-offload"
+
+
+def test_teacher_online_fp8_name(monkeypatch):
+    """vLLM 0.32 refuses quantization="fp8" on a bf16 checkpoint; the teacher asks for its online
+    shorthand instead (older vLLM without shorthands keeps "fp8")."""
+    import sys
+    import types
+
+    from reaper_pipeline.teacher import online_quant
+    for name in ("vllm", "vllm.config"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    q = types.ModuleType("vllm.config.quantization")
+    monkeypatch.setitem(sys.modules, q.__name__, q)
+    assert online_quant("fp8") == "fp8"
+    q._ONLINE_SHORTHANDS = {"fp8_per_tensor": 1, "fp8_per_block": 2}
+    assert online_quant("fp8") == "fp8_per_block" and online_quant("awq") == "awq"

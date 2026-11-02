@@ -110,8 +110,10 @@ def model_info_from_config(model_id: str, cfg: dict, checkpoint_bytes: int = 0) 
     quant = str(q.get("quant_method") or q.get("fmt") or "quantized").lower() if q else None
     total, expert = estimate_params(cfg)
     if checkpoint_bytes and not quant:  # 16-bit checkpoint: the file size is exact
-        expert *= checkpoint_bytes / 2 / 1e9 / total
+        # the routed experts follow exactly from the config; what the estimate misses (vision
+        # towers, MTP heads, Qwen3.8-Flash-Next's 51B n-gram embedding) is not expert weight
         total = checkpoint_bytes / 2 / 1e9
+        expert = min(expert, total)
     return ModelInfo(model_id, c.get("model_type", cfg.get("model_type", "?")), round(total, 2), round(expert, 2),
                      round((checkpoint_bytes or total * 2e9) / GB, 1), quant, c.get("num_hidden_layers", 0),
                      c.get("hidden_size", 0), experts_in(cfg), top_k_in(cfg), _moe_layers(c))
