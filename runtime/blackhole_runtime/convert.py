@@ -56,9 +56,6 @@ def hex_tensors(parts: dict, tiers: dict) -> dict:
 
 
 def convert(src: Path, dst: Path) -> dict:
-    from safetensors.torch import save_file
-
-    from blackhole_pipeline.serve import _mlx_state
     cfg = json.loads((src / "config.json").read_text())
     if (cfg.get("quantization_config") or {}).get("quant_method") == "blackhole-hex":
         raise SystemExit(f"{src} is already a blackhole-hex folder (the pipeline's hexvllm stage writes those for "
@@ -70,6 +67,9 @@ def convert(src: Path, dst: Path) -> dict:
                          "job function hex-vllm), which writes a folder vLLM serves directly")
     if not cfg.get("hex"):
         raise SystemExit(f"{src} has no HEX experts (config 'hex' is empty): nothing for the HEX kernel")
+    from safetensors.torch import save_file
+
+    from blackhole_pipeline.serve import _mlx_state
     tiers = {int(k): v for k, v in (cfg.get("expert_tiers") or {}).items()}
     parts: dict = {}
     state = _mlx_state(src, torch.bfloat16, hex_parts=parts)
