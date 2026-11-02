@@ -157,6 +157,13 @@ def test_run_name_is_tied_to_its_model(vm):
     assert p.returncode != 0 and "its own --name" in p.stderr
 
 
+def test_qwen4_family_gets_the_thinking_parser(vm):
+    m = _model(vm.tmp / "q4", {"model_type": "qwen4_exp", "text_config": {"model_type": "qwen4_exp_text"}})
+    vm.run(m, "--tasks", "2")
+    serve = next(c for c in vm.calls() if isinstance(c, list) and c[0] == "serve")
+    assert serve[serve.index("--reasoning-parser") + 1] == "qwen3"
+
+
 def test_other_model_on_the_port_is_not_reused(vm):
     port = _port()
     other = subprocess.Popen([str(vm.bh / "vllm" / "bin" / "vllm"), "serve", "/somewhere/else", "--port", str(port),

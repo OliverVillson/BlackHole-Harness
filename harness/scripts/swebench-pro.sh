@@ -133,7 +133,7 @@ if [ -z "${REASONING+x}" ]; then
 try: c=json.load(open(sys.argv[1]))
 except Exception: c={}
 t=((c.get("text_config") or {}).get("model_type") or c.get("model_type") or "").lower()
-print("qwen3" if t.startswith(("qwen3", "qwen3_5")) else "deepseek_r1" if t.startswith("deepseek") else "openai_gptoss" if t.startswith("gpt_oss") else "glm45" if t.startswith("glm4_moe") else "")' "$SERVE/config.json" 2>/dev/null || true)
+print("qwen3" if t.startswith(("qwen3", "qwen4")) else "deepseek_r1" if t.startswith("deepseek") else "openai_gptoss" if t.startswith("gpt_oss") else "glm45" if t.startswith("glm4_moe") else "")' "$SERVE/config.json" 2>/dev/null || true)
 fi
 [ -n "$NAME" ] || NAME="$(basename "${MODEL%/}")-$TASKS"
 RUN=$SW/runs/$NAME
