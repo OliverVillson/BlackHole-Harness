@@ -14,6 +14,8 @@ calibrate → REAP → eval, plus two stages of our own on the pruned model:
   heal   distillation of the pruned model from the teacher on fresh calibration prompts
   mlx    an MLX folder for Apple silicon: GPTQ 3-bit experts (optionally a REAQ 4-bit hot tier),
          4-bit attention and embeddings, flint_mlx.py for mlx-lm
+  hexvllm HEX experts (REAQ tiers by REAP score) written as a "blackhole-hex" folder that vLLM
+         serves with the BlackHole runtime; every other tensor copied as is (any MoE vLLM supports)
   qheal  the heal again around the quantized MLX model (frozen 3-bit experts, fake-quant attention),
          so it repairs the quantization error too; the bench then measures the healed folder
   bench  LiveCodeBench pass@1 and tok/s of the original and the REAQ model (bench_models) (one sample, up to 32k tokens)
@@ -27,8 +29,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-STAGES = ["detect", "plan", "weights", "calibrate", "score", "prune", "eval", "heal", "gptq", "reaq", "mlx", "qheal", "bench",
-          "quant", "package"]
+STAGES = ["detect", "plan", "weights", "calibrate", "score", "prune", "eval", "heal", "gptq", "reaq", "mlx", "hexvllm", "qheal",
+          "bench", "quant", "package"]
 
 # (process, stages it reports, who runs it): REAPer processes are reaper_pipeline.stages.<name>,
 # ours blackhole_pipeline.stages.<name>. Each process frees the GPU when it exits.
@@ -43,6 +45,7 @@ PROCESSES = [
     ("gptq", ["gptq"], "bh"),
     ("reaq", ["reaq"], "bh"),
     ("mlx", ["mlx"], "bh"),
+    ("hexvllm", ["hexvllm"], "bh"),
     ("qheal", ["qheal"], "bh"),
     ("bench", ["bench"], "bh"),
     ("quant", ["quant"], "reaper"),
@@ -86,6 +89,10 @@ DEFAULTS = {
     "mlx_head_vocab": 0,     # output-only vocab trim: LM head rows kept (0 = all)
     "mlx_embed_bits": 4,
     "mlx_head_bits": 6,
+    "hex_bits": 3,           # hexvllm (HEX for vLLM): 2**bits levels per expert table for most experts
+    "hex_hot": 0.25,         # share of each layer's experts (by REAP score) on 2**hex_hot_bits levels (REAQ)
+    "hex_hot_bits": 4,
+    "hex_reserve_gb": 48,    # GPU memory kept free of weights for the per-expert Hessians (big models spill to RAM)
     "bench": "lcb-v6",       # LiveCodeBench release (problems new in it) for original vs int4; "none" skips
     "bench_models": "original,reaq",  # any of original, int4, reaq, mlx
     "bench_limit": 0,        # 0 = every problem of the release

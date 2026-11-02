@@ -446,3 +446,17 @@ def test_flint_expert_lora_trains_and_merges():
         assert not any("lora" in n for n, _ in m.named_parameters())
         assert torch.allclose(m(input_ids=ids).logits, want, atol=1e-4)
         assert (want - ref).abs().max() > 1e-3
+
+
+def test_lookup_tables_stay_on_cpu(tmp_path):
+    """Qwen3.8-Flash-Next's n-gram embedding (transformers' _no_placement_params) is left out of
+    the device map, so it stays in CPU RAM, while every other tensor of its layer is placed."""
+    pytest.importorskip("transformers")
+    from tiny_moe import build
+
+    from reaper_pipeline.load import lookup_tables_on_cpu
+    d = build("qwen4_exp", tmp_path / "q4")
+    dm = lookup_tables_on_cpu(d, {0: "1GiB", "cpu": "10GiB"})
+    assert dm is not None and not any("ngram_embedding" in k for k in dm)
+    assert "model.layers.1.ple.key_proj" in dm and "model.layers.1.mlp" in dm and "model.layers.0" in dm
+    assert lookup_tables_on_cpu(build("qwen3_moe", tmp_path / "q3"), {0: "1GiB", "cpu": "10GiB"}) is None

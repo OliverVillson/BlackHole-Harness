@@ -36,6 +36,20 @@ ARCHS = {
                         layer_types=["linear_attention", "linear_attention", "linear_attention", "full_attention"],
                         linear_num_value_heads=4, linear_num_key_heads=2, linear_key_head_dim=16,
                         linear_value_head_dim=16, linear_conv_kernel_dim=4),
+    # Qwen3.8-Flash-Next (model_type qwen4_exp): Qwen3.6's layout plus gated-residual hyper
+    # connections, sparse attention (QSA indexer) on every 4th layer, an n-gram embedding (PLE) in
+    # the 2nd layer and a sigmoid output gate; image-text like the real one, experts fused on disk
+    "qwen4_exp": dict(num_experts=8, num_experts_per_tok=2, moe_intermediate_size=32,
+                      shared_expert_intermediate_size=32, num_hidden_layers=4,
+                      layer_types=["linear_attention", "linear_attention", "linear_attention", "full_attention"],
+                      linear_num_value_heads=4, linear_num_key_heads=2, linear_key_head_dim=16,
+                      linear_value_head_dim=16, linear_conv_kernel_dim=4, hc_count=4, hc_lowrank=8,
+                      ple_layer_ids=[2], ple_embed_dim=64, ngram_size=3, heads_per_ngram=8,
+                      ngram_vocab_size_base=200, split_ngram_parts=4, indexer_n_heads=2, indexer_kv_heads=1,
+                      indexer_head_dim=8, indexer_budget=8, indexer_compress_ratio=4, output_gate_type="sigmoid",
+                      eos_token_id=2, bos_token_id=2,
+                      rope_parameters={"rope_type": "default", "rope_theta": 10000.0, "partial_rotary_factor": 0.25,
+                                       "mrope_section": [1, 1, 0], "mrope_interleaved": True}),
     # REAPer's own PyTorch Flint (reaper_pipeline.models.flint): a dense first layer, sliding
     # layers with RoPE, a full layer without, attention sinks, sigmoid routing, shared expert
     "flint": dict(num_experts=8, num_experts_per_tok=2, moe_intermediate_size=32, shared_expert_intermediate_size=32,
@@ -71,7 +85,7 @@ def build(arch: str, path: Path, seed: int = 0, **over) -> Path:
     register_all()
     torch.manual_seed(seed)
     kw = {**COMMON, **ARCHS[arch], **over}
-    if arch == "qwen3_5_moe":
+    if arch in ("qwen3_5_moe", "qwen4_exp"):
         from transformers import AutoModelForImageTextToText
         kw.pop("intermediate_size")
         vision = dict(depth=1, hidden_size=32, intermediate_size=32, num_heads=2, out_hidden_size=kw["hidden_size"],
@@ -93,7 +107,50 @@ def build(arch: str, path: Path, seed: int = 0, **over) -> Path:
     path.mkdir(parents=True, exist_ok=True)
     model.save_pretrained(path, safe_serialization=True, max_shard_size="200KB")
     tokenizer().save_pretrained(path)
+    if arch == "qwen4_exp":
+        fuse_experts_on_disk(path)
     return path
+
+
+def fuse_experts_on_disk(path: Path) -> None:
+    """Rewrite per-expert tensors (what save_pretrained writes) as the fused [E, 2I, H] gate_up_proj
+    and [E, H, I] down_proj tensors Qwen3.8-Flash-Next's checkpoint stores."""
+    import re
+
+    import torch
+    from safetensors.torch import load_file, save_file
+    idx_p = path / "model.safetensors.index.json"
+    wmap = json.loads(idx_p.read_text())["weight_map"]
+    pat = re.compile(r"^(.*\.mlp\.experts)\.(\d+)\.(gate|up|down)_proj\.weight$")
+    per: dict = {}
+    files = sorted(set(wmap.values()))
+    keep: dict = {}
+    for f in files:
+        for k, t in load_file(str(path / f)).items():
+            m = pat.match(k)
+            if m:
+                per.setdefault(m.group(1), {}).setdefault(int(m.group(2)), {})[m.group(3)] = t
+            else:
+                keep[k] = t
+        (path / f).unlink()
+    for pre, ex in per.items():
+        n = len(ex)
+        keep[f"{pre}.gate_up_proj"] = torch.stack([torch.cat([ex[j]["gate"], ex[j]["up"]]) for j in range(n)])
+        keep[f"{pre}.down_proj"] = torch.stack([ex[j]["down"] for j in range(n)])
+    shards, cur, size, new_map = [], {}, 0, {}
+    for k in sorted(keep):
+        cur[k] = keep[k].contiguous()
+        size += keep[k].numel() * keep[k].element_size()
+        if size > 200_000:
+            shards.append(cur)
+            cur, size = {}, 0
+    if cur:
+        shards.append(cur)
+    for i, sh in enumerate(shards):
+        name = f"model-{i + 1:05d}-of-{len(shards):05d}.safetensors"
+        save_file(sh, str(path / name), metadata={"format": "pt"})
+        new_map.update({k: name for k in sh})
+    idx_p.write_text(json.dumps({"metadata": {}, "weight_map": new_map}, indent=2))
 
 
 if __name__ == "__main__":

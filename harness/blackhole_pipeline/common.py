@@ -33,10 +33,22 @@ def stage_main(run, stage: str) -> None:
         sys.exit(1)
 
 
+def reserve_gpu(prof: dict, gb: float) -> dict:
+    """The run profile with `gb` GiB per GPU kept free of weights (for per-expert Hessians next to a
+    model that fills the GPU; the rest of the weights then spill to CPU RAM, see the plan)."""
+    r = dict(prof.get("reap") or {})
+    mm = dict(r.get("max_memory") or {})
+    for k, v in list(mm.items()):
+        if str(k) != "cpu" and isinstance(v, str) and v.endswith("GiB"):
+            mm[k] = f"{max(1, int(float(v[:-3]) - gb))}GiB"
+    r["max_memory"] = mm or None
+    return {**prof, "reap": r}
+
+
 class Pruned:
     """The REAP-pruned bf16 model, its MoE blocks, per-expert weight views and checkpoint names."""
 
-    def __init__(self, rj, n_calib: int, src: Path | None = None):
+    def __init__(self, rj, n_calib: int, src: Path | None = None, reserve_gb: float = 0.0):
         from bench_b200 import expert_views
         from reaper_pipeline import moe
         from reaper_pipeline.load import input_device, load_model, load_tokenizer
@@ -47,6 +59,8 @@ class Pruned:
         if not (self.src / "config.json").exists():
             raise RuntimeError(f"no pruned model in {self.src}")
         prof = profile(rj)
+        if reserve_gb > 0:
+            prof = reserve_gpu(prof, reserve_gb)
         self.model = load_model(self.src, prof, rj.config.trust_remote_code)
         self.blocks = moe.find_blocks(self.model)
         if not self.blocks:

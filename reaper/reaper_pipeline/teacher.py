@@ -24,6 +24,23 @@ def pick_backend(prof: dict, wanted: str = "auto") -> str:
         return "hf"
 
 
+def online_quant(name: str) -> str:
+    """The name this vLLM gives on-the-fly quantization of a bf16 checkpoint. vLLM 0.32 refuses
+    quantization="fp8" for checkpoints that are not fp8 already ("no longer supports online
+    quantization") and calls it fp8_per_block / fp8_per_tensor; it then loads each layer onto
+    the meta device and quantizes it as it arrives, so the bf16 model never has to fit."""
+    if name != "fp8":
+        return name
+    try:
+        from vllm.config.quantization import _ONLINE_SHORTHANDS
+    except Exception:  # noqa: BLE001  (older vLLM: "fp8" still means online fp8)
+        return name
+    for alt in ("fp8_per_block", "fp8_per_tensor"):
+        if alt in _ONLINE_SHORTHANDS:
+            return alt
+    return name
+
+
 class VllmTeacher:
     def __init__(self, model_dir: str, prof: dict, trust_remote_code: bool = False, seed: int = 0):
         for k, v in (prof.get("env") or {}).items():
@@ -34,6 +51,8 @@ class VllmTeacher:
         kw = {k: t[k] for k in ("tensor_parallel_size", "gpu_memory_utilization", "quantization",
                                  "max_model_len", "kv_cache_dtype", "max_num_seqs") if t.get(k) is not None}
         kw["tensor_parallel_size"] = max(1, kw.get("tensor_parallel_size", 1))
+        if kw.get("quantization"):
+            kw["quantization"] = online_quant(kw["quantization"])
         log(f"teacher: vLLM {kw}")
         self.llm = LLM(model=str(model_dir), dtype=prof.get("dtype", "auto"), trust_remote_code=trust_remote_code,
                        seed=seed, **kw)

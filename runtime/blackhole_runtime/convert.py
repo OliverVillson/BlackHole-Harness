@@ -9,7 +9,9 @@ already in that order) become `<mlp>.experts.tier<L>` with their expert ids. Eve
 bf16, so a Qwen3.6 build is a few GB bigger than on the Mac. An output-trimmed LM head is
 expanded back to the full vocabulary and its kept token ids go into the quantization config,
 where vllm_hex.py masks every other token. Needs the pipeline package (blackhole_pipeline) and
-an architecture vLLM supports (Qwen3.5 / 3.6 MoE; Flint has no vLLM model).
+an architecture vLLM supports (Qwen3.5 / 3.6 MoE; Flint has no vLLM model). Other MoE models
+(Qwen3.8-Flash-Next, ...) do not go through MLX: the pipeline's hexvllm stage writes their
+blackhole-hex folder straight from the REAP-pruned checkpoint, and that folder needs no conversion.
 """
 
 from __future__ import annotations
@@ -54,15 +56,20 @@ def hex_tensors(parts: dict, tiers: dict) -> dict:
 
 
 def convert(src: Path, dst: Path) -> dict:
+    cfg = json.loads((src / "config.json").read_text())
+    if (cfg.get("quantization_config") or {}).get("quant_method") == "blackhole-hex":
+        raise SystemExit(f"{src} is already a blackhole-hex folder (the pipeline's hexvllm stage writes those for "
+                         f"any MoE): serve it as it is with `vllm serve {src}`, no conversion needed")
+    arch = ARCH.get(cfg.get("model_type"))
+    if arch is None:
+        raise SystemExit(f"{src}: this converter only reads MLX HEX exports of {sorted(ARCH)} (model type here: "
+                         f"{cfg.get('model_type')!r}). For any other MoE run the pipeline's hexvllm stage (BlackHole-Dev "
+                         "job function hex-vllm), which writes a folder vLLM serves directly")
+    if not cfg.get("hex"):
+        raise SystemExit(f"{src} has no HEX experts (config 'hex' is empty): nothing for the HEX kernel")
     from safetensors.torch import save_file
 
     from blackhole_pipeline.serve import _mlx_state
-    cfg = json.loads((src / "config.json").read_text())
-    arch = ARCH.get(cfg.get("model_type"))
-    if arch is None:
-        raise SystemExit(f"{src}: model type {cfg.get('model_type')!r} has no vLLM model here (supported: {sorted(ARCH)})")
-    if not cfg.get("hex"):
-        raise SystemExit(f"{src} has no HEX experts (config 'hex' is empty): nothing for the HEX kernel")
     tiers = {int(k): v for k, v in (cfg.get("expert_tiers") or {}).items()}
     parts: dict = {}
     state = _mlx_state(src, torch.bfloat16, hex_parts=parts)

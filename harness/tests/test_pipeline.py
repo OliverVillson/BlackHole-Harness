@@ -504,3 +504,92 @@ def hex_runtime_matches_mlx(xdir: Path, dst: Path, cfg: dict) -> None:
     hcfg = json.loads((dst / "config.json").read_text())
     assert hcfg["quantization_config"]["quant_method"] == "blackhole-hex"
     assert hcfg["architectures"] == ["Qwen3_5MoeForCausalLM"] and "hex" not in hcfg
+
+
+@pytest.mark.parametrize("arch", ["qwen4_exp", "qwen3_moe"])
+def test_reapq_hex_for_vllm(tmp_path, arch):
+    """REAP then the hexvllm stage on a tiny Qwen3.8-Flash-Next (qwen4_exp: image-text, fused
+    experts on disk, hyper connections, sparse attention, n-gram embedding) and a tiny Qwen3-MoE
+    (per-expert tensors): the folder keeps every non-expert tensor of the pruned checkpoint in its
+    own names, swaps the routed experts for HEX tiers (REAQ: top half by REAP on 16 levels), and
+    the tiers, dequantized into the pruned model, give exactly the KL the stage measured. The HEX
+    kernel (Triton, interpreted on the CPU) computes the same experts."""
+    pytest.importorskip("transformers")
+    sys.path.insert(0, str(REAPER / "tests"))
+    from tiny_moe import build
+    model = build(arch, tmp_path / f"{arch}-tiny")
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(REAPER), str(HARNESS)]), "REAPER_HW": "builtin",
+           "HF_HUB_OFFLINE": "1", "HF_DATASETS_OFFLINE": "1", "REAPER_HOME": str(tmp_path / "home"),
+           "BLACKHOLE_HOME": str(tmp_path / "bhhome"), "BLACKHOLE_NO_VLLM": "1"}
+    job = tmp_path / "bh" / "hexvllm"
+    job.mkdir(parents=True)
+    (job / "config.json").write_text(json.dumps({
+        "model": str(model), "schema": "test", "target": "gpu", "purpose": "",
+        "stage_list": ["detect", "plan", "weights", "calibrate", "score", "prune", "eval", "hexvllm", "package"],
+        "calib_samples": 8, "heldout": 4, "max_seq": 96, "answer_max_tokens": 12, "writer_max_tokens": 24,
+        "teacher_backend": "hf", "calib": "builtin", "gptq_calib": 8, "hex_hot": 0.5}))
+    p = subprocess.run([sys.executable, "-m", "blackhole_pipeline", "--job", str(job)], env=env, cwd=tmp_path,
+                       capture_output=True, text=True, timeout=1200)
+    assert p.returncode == 0, p.stdout[-4000:] + p.stderr[-3000:]
+    events = [e for e in map(parse_event, p.stdout.splitlines()) if e]
+    assert [e for e in events if e["stage"] == "hexvllm"][-1]["status"] == "done"
+    work = job / "reaper" / "work"
+    res = json.loads((work / "hexvllm.json").read_text())
+    out = Path(res["out"])
+    n_layers = 4 if arch == "qwen4_exp" else 2
+    assert res["tiers"] == {"16": 3 * n_layers, "8": 3 * n_layers} and abs(res["bpw"] - 3.75) < 1e-9
+    receipt = json.loads((job / "receipt.json").read_text())
+    assert receipt["model"] == str(out) and (job / "out" / out.name).exists() and "vllm serve" in (out / "README.md").read_text()
+
+    from safetensors import safe_open
+    pruned = job / "reaper" / "out" / out.name[:-len("-HEX-vLLM")]
+    def keys(d):
+        return set(json.loads((d / "model.safetensors.index.json").read_text())["weight_map"])
+    src_keys, hex_keys = keys(pruned), keys(out)
+    experts = {k for k in src_keys if ".experts." in k}
+    assert experts and not (experts & hex_keys)                     # every routed expert replaced ...
+    assert src_keys - experts <= hex_keys                           # ... everything else kept, same names
+    tiers = sorted(k for k in hex_keys if ".tier" in k)
+    pre = "model.language_model.layers.0.mlp.experts" if arch == "qwen4_exp" else "model.layers.0.mlp.experts"
+    assert f"{pre}.tier16.experts" in tiers and f"{pre}.tier8.down_proj.idx" in tiers
+    cfg = json.loads((out / "config.json").read_text())
+    assert cfg["quantization_config"]["quant_method"] == "blackhole-hex"
+    assert "quantization_config" not in (cfg.get("text_config") or {})
+
+    # the tiers, dequantized into the pruned model, are the model the stage measured
+    from blackhole_pipeline.common import write_checkpoint  # noqa: F401  (the stage's writer)
+    from blackhole.anatomy.hex import hex_dequant
+    from reaper_pipeline.load import load_model
+    from reaper_pipeline.stages.eval import compare
+    sys.path.insert(0, str(REAPER / "gpu_perf"))
+    from bench_b200 import expert_views
+    from reaper_pipeline import moe
+    t = {}
+    for f in out.glob("*.safetensors"):
+        with safe_open(str(f), "pt") as h:
+            t.update({n: h.get_tensor(n) for n in h.keys() if ".tier" in n})
+    m = load_model(pruned, {"device": "cpu", "dtype": "float32"})
+    H = moe.text_config(m.config).hidden_size
+    for blk in moe.find_blocks(m):
+        pre = next(n.rsplit(".tier", 1)[0] for n in t if f"layers.{blk.layer}.mlp.experts.tier" in n)
+        for L in (16, 8):
+            ids = t[f"{pre}.tier{L}.experts"].tolist()
+            W = {pr: hex_dequant(*(t[f"{pre}.tier{L}.{pr}.{q}"] for q in ("idx", "block_scale", "expert_scale", "levels")),
+                                 L.bit_length() - 1) for pr in ("gate_proj", "up_proj", "down_proj")}
+            with torch.no_grad():
+                for i, j in enumerate(ids):
+                    v = expert_views(blk, j, H)
+                    v["gate"].copy_(W["gate_proj"][i])
+                    v["up"].copy_(W["up_proj"][i])
+                    v["down"].copy_(W["down_proj"][i])
+    r = compare(m, torch.load(work / "teacher_ref.pt", weights_only=False))
+    assert abs(r["kl"] - res["kl"]) <= 1e-3 + 0.05 * res["kl"], (r["kl"], res["kl"])
+    assert abs(r["top1_agreement"] - res["top1"]) <= 0.05
+
+    import importlib.util
+    if importlib.util.find_spec("blackhole_runtime") is None or importlib.util.find_spec("triton") is None:
+        return
+    rt = subprocess.run([sys.executable, "-m", "blackhole_runtime.check_folder", str(out), "--device", "cpu"],
+                        env={**env, "TRITON_INTERPRET": "1"}, capture_output=True, text=True, timeout=900)
+    assert rt.returncode == 0, rt.stdout[-2000:] + rt.stderr[-2000:]
+    assert json.loads(rt.stdout.strip().splitlines()[-1])["checked"] == n_layers

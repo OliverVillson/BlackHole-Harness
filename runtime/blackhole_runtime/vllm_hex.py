@@ -14,7 +14,10 @@ one table size), each with the int32 ids of its experts and per projection the s
 The experts run through the HEX Triton kernel (hex_moe.py). Single GPU (tensor and expert
 parallel size 1): the target is one mid-tier NVIDIA card.
 
-Written against vLLM 0.32's modular MoE interface (FusedMoEMethodBase.apply with topk ids).
+Written against vLLM 0.32's modular MoE interface (FusedMoEMethodBase.apply with topk ids). Any
+MoE model whose vLLM class builds its routed experts as RoutedExperts works (Qwen3.5 / 3.6,
+Qwen3.8-Flash-Next, Qwen3-MoE, ...); models whose own layers check the quantization config
+(Qwen3.8-Flash-Next's n-gram embedding) are patched in plain_ple_embedding().
 """
 
 from __future__ import annotations
@@ -24,6 +27,7 @@ import re
 import torch
 
 NAME = "blackhole-hex"
+KEEP_PLE = {NAME, "online"}   # quantization methods under which Qwen4Exp's n-gram table stays as stored
 HEAD_FILL = -1.0e4   # logit of a token an output-trimmed LM head cannot write
 _TIER = re.compile(r"^(?:.*\.)?tier(\d+)\.(?:(experts)|(gate_proj|up_proj|down_proj)\.(idx|block_scale|expert_scale|levels))$")
 
@@ -34,8 +38,35 @@ def _device() -> torch.device:
     return torch.device("cpu")
 
 
+def plain_ple_embedding() -> bool:
+    """vLLM's Qwen4Exp (Qwen3.8-Flash-Next) picks a format for its n-gram embedding (PLE) from the
+    model's quantization config and refuses any config it does not know. A HEX folder keeps that
+    table as the checkpoint stores it, so under "blackhole-hex" it gets vLLM's own unquantized
+    method; so does on-the-fly quantization of the bf16 checkpoint (vLLM's "online" methods,
+    e.g. --quantization fp8_per_block, which REAPer's teacher uses when bf16 does not fit one
+    GPU): the table is a lookup, not a matmul. Returns whether that model is in this vLLM."""
+    try:
+        from vllm.models.qwen4_exp.common import ngram_embedding as ng
+    except Exception:  # noqa: BLE001  (older vLLM, or one without this model)
+        return False
+    cls = getattr(ng, "Qwen4ExpPLEEmbeddingMethod", None)
+    if cls is None or getattr(cls, "_blackhole_hex", False):
+        return cls is not None
+    orig = cls.from_quant_config
+
+    def from_quant_config(quant_config, prefix, embedding_dtype=None):
+        if quant_config is not None and getattr(quant_config, "get_name", lambda: None)() in KEEP_PLE:
+            quant_config = None
+        return orig(quant_config, prefix, embedding_dtype)
+
+    cls.from_quant_config = staticmethod(from_quant_config)
+    cls._blackhole_hex = True
+    return True
+
+
 def register() -> None:
     """vLLM general-plugin entry point; safe to call more than once."""
+    plain_ple_embedding()
     from vllm.model_executor.layers.fused_moe import FusedMoEMethodBase, RoutedExperts
     from vllm.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
     from vllm.model_executor.layers.quantization import register_quantization_config
