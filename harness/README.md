@@ -61,14 +61,23 @@ bash ~/BlackHole-Harness/harness/scripts/swebench-pro.sh ~/models/qwen3.6-blackh
 ```
 
 It converts a BlackHole MLX HEX export to a vLLM `blackhole-hex` folder once (`blackhole_runtime.verify`),
-serves it with `vllm serve` (or reuses a server already on port 8000), installs Harbor and
+serves it with `vllm serve` (a vLLM-ready folder, e.g. a `blackhole-hex` folder, is served as it is;
+a plain MLX folder is refused; a server already on the port is reused only when it serves this very
+model, else another port is used; context length and reasoning parser come from the model's config), installs Harbor and
 mini-swe-agent in `~/.blackhole/swebench/venv`, then runs mini-swe-agent with Scale's locked text
 prompt on this machine, sending only bash into each task's offline container. Every captured diff
 is re-graded on a fresh container (`patch_replay`), which is the score to report. `--tasks` is
 `smoke` (20 tasks over all repos), `hard` (HARD-51), `all` (642) or a number; `-n` sets how many
 tasks run at once (default from CPUs and RAM, at most 32). Rerunning the same command resumes.
 Results: `~/.blackhole/swebench/runs/NAME/results.json` (`{instance_id: resolved}`) and
-`results.summary.json`. Needs docker; images are pruned when free disk drops below `MIN_FREE_GB`.
+`results.summary.json`. Needs docker: when it is missing and sudo needs no password, the script
+installs it, adds you to the docker group and re-runs itself under `sg docker` (no new login).
+It refuses to start below `MIN_START_GB` (60) free where Docker keeps images, and prunes images
+when free disk drops below `MIN_FREE_GB` (150). A run name belongs to one model (`model.txt` in the
+run folder), so a second model needs its own `--name`. `--check` runs only the checks. Stopping it
+(Ctrl-C or a TERM) stops vLLM and Harbor too; vLLM is stopped before the re-grade, which does not
+need the GPU. BlackHole-Dev's `external-bench` job function (`preset="swebench-pro"`) runs this
+script from a recipe.
 
 ## Layout
 
