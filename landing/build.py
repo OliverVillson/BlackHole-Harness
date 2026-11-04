@@ -9,6 +9,25 @@ from pathlib import Path
 
 here = Path(__file__).parent
 
+# Easy switches for the live site. page.html holds both versions of each flagged bit as
+# <!--flag:NAME-->shown when on<!--else-->shown when off<!--/flag-->; only index.html is resolved.
+# dev-public: flip to True once github.com/OliverVillson/Blackhole-Dev is public.
+# hf-small: the Hugging Face URL of blackhole-small once it is uploaded ("" = not yet).
+FLAGS = {
+    "dev-public": False,
+    "hf-small": "",
+}
+
+
+def apply_flags(text: str) -> str:
+    def one(m):
+        on = FLAGS.get(m[1])
+        if on is None:
+            raise SystemExit(f"unknown flag {m[1]!r} in page.html")
+        out = m[2] if on else m[3]
+        return out.replace("{" + m[1] + "}", str(on)) if on else out
+    return re.sub(r"<!--flag:([\w-]+)-->(.*?)<!--else-->(.*?)<!--/flag-->", one, text, flags=re.S)
+
 
 def highlight(src: str) -> str:
     """Python source as escaped HTML with spans: k keyword, s string, c comment, f call or decorator, n number."""
@@ -53,6 +72,7 @@ page = re.sub(r"(<!--recipe:([\w.]+)-->).*?(<!--/recipe-->)",
 
 head, rest = page.split("<style>", 1)
 style, body = rest.split("</style>", 1)
+body = apply_flags(body)
 (here / "index.html").write_text(f"""<!doctype html>
 <html lang="en">
 <head>
