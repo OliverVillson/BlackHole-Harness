@@ -3,11 +3,11 @@
 
 from blackhole_dev.recipe import Recipe, gate
 
-recipe = Recipe("me/reap-hex", "1.0.0",
+recipe = Recipe("examples/reap-hex", "1.0.0",
                 title="REAP, then HEX codebooks",
                 targets={"architectures": ["moe"]})
 
-calib = recipe.input("calib", "path", default="my-prompts.txt")
+calib = recipe.input("calib", "path", default="prompts.txt")
 
 recipe.fn("reap-score", calib=calib)
 recipe.fn("reap-prune", ratio=0.25)

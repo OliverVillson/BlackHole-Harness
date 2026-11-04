@@ -3,6 +3,6 @@
 
 from blackhole_dev.recipe import Recipe
 
-recipe = Recipe("me/int4", "1.0.0", title="Everything to 4 bits")
+recipe = Recipe("examples/int4", "1.0.0", title="Everything to 4 bits")
 
 recipe.fn("quant", select="layers[*]", format="int4")
