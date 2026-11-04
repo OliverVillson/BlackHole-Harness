@@ -3,7 +3,7 @@
 
 from blackhole_dev.recipe import Recipe
 
-recipe = Recipe("me/moe-int4", "1.0.0",
+recipe = Recipe("examples/moe-int4", "1.0.0",
                 title="REAP 25% + GPTQ int4")
 
 recipe.fn("calibrate", calib="code")

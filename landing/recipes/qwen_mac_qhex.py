@@ -1,5 +1,5 @@
 # REAP/Q-HEX Mac coder (Qwen3.6): the recipe behind the 9.8 GB build. Every step is a built-in
-# function you can open and fork in BlackHole-Dev.
+# function that opens and forks in BlackHole-Dev.
 
 from blackhole_dev.recipe import Recipe
 

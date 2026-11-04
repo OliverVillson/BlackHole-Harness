@@ -80,7 +80,7 @@ body = apply_flags(body)
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 {head.strip()}
 <meta property="og:title" content="BlackHole-Dev">
-<meta property="og:description" content="Write a recipe, collapse an open model until it fits your machine.">
+<meta property="og:description" content="Write a recipe, collapse an open model until it fits the machine at hand.">
 <meta property="og:image" content="https://blackholeharness.dev/shots/dev-hero.webp">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">

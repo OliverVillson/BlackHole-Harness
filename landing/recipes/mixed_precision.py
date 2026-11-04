@@ -1,10 +1,10 @@
-# Your own step: a function defined right in the recipe
+# A custom step: a function defined right in the recipe
 # file, shipped inside the bundle with it.
 
 from blackhole_dev import function
 from blackhole_dev.recipe import Recipe
 
-recipe = Recipe("me/mixed", "1.0.0",
+recipe = Recipe("examples/mixed", "1.0.0",
                 title="8-bit attention, 4-bit experts")
 
 
