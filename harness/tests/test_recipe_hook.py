@@ -179,3 +179,15 @@ def test_a_recipe_without_reap_may_start_from_a_dense_model(tmp_path):
             assert ("not a mixture-of-experts" in str(e)) is not ok, e
         else:
             assert ok
+
+
+def test_plan_lets_a_dense_model_through_the_hardware_planner(monkeypatch):
+    """On a GPU machine the hardware planner itself refuses a dense model; dense_ok drops only that."""
+    from reaper_pipeline.stages import plan
+    refused = "/m/granite is not a mixture-of-experts model (no routed expert count in its config)"
+    prof = {"ok": False, "problems": [refused], "notes": []}
+    plan.allow_dense(prof)
+    assert prof["ok"] and prof["problems"] == [] and any("dense" in n for n in prof["notes"])
+    prof = {"ok": False, "problems": [refused, "not enough GPU memory"], "notes": []}
+    plan.allow_dense(prof)
+    assert not prof["ok"] and prof["problems"] == ["not enough GPU memory"]

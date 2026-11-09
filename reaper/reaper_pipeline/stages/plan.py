@@ -46,6 +46,16 @@ def adapt_to_model(prof: dict, shape: dict) -> None:
                                             "cache; REAP runs REAPer's PyTorch Flint")
 
 
+def allow_dense(prof: dict) -> None:
+    """A recipe whose own functions convert a dense model (dense_ok): the hardware planner's
+    "not a mixture-of-experts model" refusal does not apply, its other problems still do."""
+    probs = [p for p in prof.get("problems") or [] if "not a mixture-of-experts" not in p]
+    if len(probs) != len(prof.get("problems") or []):
+        prof["problems"] = probs
+        prof["ok"] = not probs
+        prof.setdefault("notes", []).append("dense model: the recipe's own functions do the work, no REAP")
+
+
 def run(job: Job) -> None:
     cfg = job.config
     if not 0 < cfg.prune < 1:
@@ -61,6 +71,8 @@ def run(job: Job) -> None:
     src = str(job.model_dir) if job.model_dir.exists() else cfg.model
     hw, prof = hardware.profile(src, cfg.prune, cfg.max_seq)
     adapt_to_model(prof, shape)
+    if shape["experts"] < 2 and cfg.dense_ok:
+        allow_dense(prof)
     job.write("hardware.json", hw)
     job.write("plan.json", prof)
     log(f"hardware ({prof['source']}): {prof.get('summary', '')}")
