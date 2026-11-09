@@ -191,3 +191,30 @@ def test_plan_lets_a_dense_model_through_the_hardware_planner(monkeypatch):
     prof = {"ok": False, "problems": [refused, "not enough GPU memory"], "notes": []}
     plan.allow_dense(prof)
     assert not prof["ok"] and prof["problems"] == ["not enough GPU memory"]
+
+
+def test_job_functions_named_after_the_stage_they_wrap(tmp_path):
+    """Every built-in recipe calls recipe.fn("calibrate") ... recipe.fn("package"): the job function
+    takes the place of that pipeline stage (and runs it with its own knobs) instead of being refused."""
+    raw = raw_recipe({"id": "calibrate", "kind": "job.fn", "fn": "calibrate", "calib": "code"},
+                     {"id": "reap_gpu", "kind": "job.fn", "fn": "reap-gpu"},
+                     {"id": "qheal", "kind": "job.fn", "fn": "qheal"},
+                     {"id": "bench", "kind": "job.fn", "fn": "bench"},
+                     {"id": "package", "kind": "job.fn", "fn": "package"})
+    assert rc.problems(raw) == []
+    stages = rc.stage_list(raw)
+    assert stages == ["detect", "plan", "weights", "calibrate", "reap_gpu", "qheal", "bench", "package"]
+    cfg = rc.prepare(tmp_path / "job", make_bundle(tmp_path / "r.bhr", raw))
+    assert rc.fn_stages(cfg) == {"calibrate", "reap_gpu", "qheal", "bench", "package"}
+    procs = rc.processes(cfg["stage_list"], rc.fn_stages(cfg))
+    assert [p[0] for p in procs] == stages
+    assert all(p[2] == "fn" for p in procs[3:]) and all(p[2] != "fn" for p in procs[:3])
+    # without the steps (an older config) the stages still map to pipeline processes
+    assert [p[2] for p in rc.processes(stages)][3] != "fn"
+    # an id that names a pipeline stage but calls another function, or a repeated id, is refused
+    other = raw_recipe({"id": "package", "kind": "job.fn", "fn": "kl-eval"})
+    assert "calls 'kl-eval'" in rc.problems(other)[0]
+    twice = raw_recipe({"id": "x", "kind": "job.fn", "fn": "a"}, {"id": "x", "kind": "job.fn", "fn": "b"})
+    assert "used twice" in rc.problems(twice)[0]
+    clash = raw_recipe({"id": "bench", "kind": "pipeline.bench"}, {"id": "bench", "kind": "job.fn", "fn": "bench"})
+    assert "used twice" in rc.problems(clash)[0]

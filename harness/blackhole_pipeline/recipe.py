@@ -157,8 +157,11 @@ def problems(raw: dict) -> list[str]:
             if not st.get("fn"):
                 out.append(f"stage {i + 1}: job.fn needs fn = \"<function name>\"")
             sid = stage_id(st)
-            if sid in STAGES or sid in seen:
-                out.append(f"stage {i + 1}: id {sid!r} is taken by a pipeline stage; give the step another id")
+            if sid in seen:
+                out.append(f"stage {i + 1}: id {sid!r} is used twice; give the step another id")
+            elif sid in STAGES and st.get("fn") != sid:
+                out.append(f"stage {i + 1}: id {sid!r} is a pipeline stage and this step calls {st.get('fn')!r}; "
+                           "give the step another id")
             seen.add(sid)
         else:
             out.append(f"stage {i + 1}: {op} is a catalog op; a pipeline recipe has only pipeline.* and job.fn stages")
@@ -172,18 +175,29 @@ def stage_list(raw: dict) -> list[str]:
         op = _op(st)
         if op == "pipeline.reap":
             out += ["score", "prune", "eval"]
-        else:
+        elif stage_id(st) not in out:      # recipe.fn("calibrate") takes the place of the calibrate stage
             out.append(stage_id(st))
     return out
 
 
-def processes(stages: list[str]) -> list[tuple[str, list[str], str]]:
+def fn_stages(cfg: dict) -> set[str]:
+    """The stage ids a job function runs (config steps of kind fn), including the ones named
+    after the pipeline stage they wrap: recipe.fn("calibrate"), "package", "qheal", "bench"."""
+    return {s["id"] for s in cfg.get("steps") or [] if s.get("kind") == "fn" and s.get("id")}
+
+
+def processes(stages: list[str], fns: set[str] | frozenset = frozenset()) -> list[tuple[str, list[str], str]]:
     """The (process, stages, who) list run() walks, in the recipe's order. Stages that are no
-    pipeline process are job functions: who = "fn"."""
+    pipeline process are job functions: who = "fn", and so are the stages in `fns` (a job
+    function named after the pipeline stage it wraps, which runs that stage with its own knobs)."""
     by_stage = {s: p for p in PROCESSES for s in p[1]}
     out, have = [], set()
     for s in stages:
-        if s in by_stage:
+        if s in fns:
+            if s not in have:
+                out.append((s, [s], "fn"))
+                have.add(s)
+        elif s in by_stage:
             p = by_stage[s]
             if p[0] not in have:
                 out.append(p)
