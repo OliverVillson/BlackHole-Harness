@@ -238,8 +238,8 @@ def run(bh: BHJob, start: str | None = None) -> int:
     wanted = schema_stages(bh.config.get("schema"), bh.config)
     procs = PROCESSES
     if bh.config.get("stage_list"):   # a recipe: its stages in its order, job functions included
-        from blackhole_pipeline.recipe import processes
-        procs = processes(bh.config["stage_list"])
+        from blackhole_pipeline.recipe import fn_stages, processes
+        procs = processes(bh.config["stage_list"], fn_stages(bh.config))
     for name, stages, who in procs:
         if wanted and not any(s in wanted for s in stages):
             continue
